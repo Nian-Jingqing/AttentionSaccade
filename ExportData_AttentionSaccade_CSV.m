@@ -3,7 +3,7 @@ close all;
 clc;
 %%
 datafolder = '/home/sammirc/Experiments/Nick/AttentionSaccade/behaviour'; %workstation data directory
-%datafolder = '/Users/user/Desktop/Experiments/Nick/AttentionSaccade/behaviour'; % laptop data directory
+datafolder = '/Users/user/Desktop/Experiments/Nick/AttentionSaccade/behaviour'; % laptop data directory
 cd(datafolder);
 
 sublist = [1,2,3,4,5,6,7,8,9];
@@ -39,10 +39,11 @@ for isub = 1:length(sublist)
         subject(:) = sublist(isub);
         session    = zeros(length(resp),1);
         session(:) = NaN;
+        trial     = 1:length(resp); trial = trial';
 
-        dat   = cat(2, subject ,  session ,  task ,  cuecol ,  cueloc ,  validity ,  targloc ,  targtilt ,  delay ,  resp ,  time ,  corr);
-        names = {     'subject', 'session', 'task', 'cuecol', 'cueloc', 'validity', 'targloc', 'targtilt', 'delay', 'resp', 'time', 'corr'};
-        write = dataset(subject, session, task, cuecol, cueloc, validity, targloc, targtilt, delay, resp, time, corr, 'VarNames', names);
+        dat   = cat(2, subject ,  session ,  trial ,  task ,  cuecol ,  cueloc ,  validity ,  targloc ,  targtilt ,  delay ,  resp ,  time ,  corr);
+        names = {     'subject', 'session', 'trial', 'task', 'cuecol', 'cueloc', 'validity', 'targloc', 'targtilt', 'delay', 'resp', 'time', 'corr'};
+        write = dataset(subject, session, trial, task, cuecol, cueloc, validity, targloc, targtilt, delay, resp, time, corr, 'VarNames', names);
         
         filename = sprintf('%s/csv/AttSacc_S%02d.csv',datafolder, sublist(isub));
         export(write, 'File', filename, 'delimiter', ',');
@@ -75,10 +76,11 @@ for isub = 1:length(sublist)
             subject(:) = sublist(isub);
             session    = zeros(length(resp),1);
             session(:) = ipart;
+            trial      = 1:length(resp); trial = trial';
 
-            dat   = cat(2, subject ,  session ,  task ,  cuecol ,  cueloc ,  validity ,  targloc ,  targtilt ,  delay ,  resp ,  time ,  corr);
-            names = {     'subject', 'session', 'task', 'cuecol', 'cueloc', 'validity', 'targloc', 'targtilt', 'delay', 'resp', 'time', 'corr'};
-            write = dataset(subject, session, task, cuecol, cueloc, validity, targloc, targtilt, delay, resp, time, corr, 'VarNames', names);
+            dat   = cat(2, subject ,  session ,  trial,   task ,  cuecol ,  cueloc ,  validity ,  targloc ,  targtilt ,  delay ,  resp ,  time ,  corr);
+            names = {     'subject', 'session', 'trial', 'task', 'cuecol', 'cueloc', 'validity', 'targloc', 'targtilt', 'delay', 'resp', 'time', 'corr'};
+            write = dataset(subject, session, trial, task, cuecol, cueloc, validity, targloc, targtilt, delay, resp, time, corr, 'VarNames', names);
 
             filename = sprintf('%s/csv/AttSacc_S%02d%s.csv',datafolder, sublist(isub), parts(ipart));
             export(write, 'File', filename, 'delimiter', ',');
