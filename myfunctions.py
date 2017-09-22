@@ -48,10 +48,10 @@ def interpolateBlinks(trial, kind = 'cubic'):
         for blink in blinks:
             start, end = blink[0]-fstime, blink[1]-fstime #get start/end times of blink relative to trial start. this is an underestimate (~10ms) from the eyetracker
             
-            if end+80 >= len(time): #check if blink happened across end of the trial (i.e. intend beyond last trial sample)
+            if end+80 >= time[-1]: #check if blink happened across end of the trial (i.e. intend beyond last trial sample)
                 intstart, intend = start-80, end+80       #take points around the blink to use in the interpolation function
                 intend = time[-1] #set intend to end of trial
-                to_interp = np.arange(start-80, intend)
+                to_interp = np.arange(start-80, intend+1) #add one because of 0 indexing!
                 x[to_interp] = np.nanmean(x[start-80:start-40]) #replace with average of 40 samples prior to blink
                 y[to_interp] = np.nanmean(y[start-80:start-40])
             elif start-80 <= time[0]: #blink happened before start of trial/continued into trial start
