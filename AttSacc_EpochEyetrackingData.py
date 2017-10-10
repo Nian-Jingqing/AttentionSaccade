@@ -113,11 +113,11 @@ for sub in range(len(sublist)):
 
         #take 200 samples before, and 800 samples after, if subject is sampled at 1khz
         #if sublist[sub] != 4:
-        #    epoch                = np.arange(cueind-200, cueind+800) #extra 1 for the 0 indexing
-        #    edata[trial]['x']    = edata[trial]['x'][epoch]   # epoch the x coord data
-        #    edata[trial]['y']    = edata[trial]['y'][epoch]   # epoch the y coord data
-        #    edata[trial]['size'] = edata[trial]['size'][epoch]# epoch the pupil data
-        #    edata[trial]['time'] = edata[trial]['time'][epoch] - cueind #epoch the timescale too, and rescale relative to the trigger
+        epoch                = np.arange(cueind-200, cueind+800) #extra 1 for the 0 indexing
+        edata[trial]['x']    = edata[trial]['x'][epoch]   # epoch the x coord data
+        edata[trial]['y']    = edata[trial]['y'][epoch]   # epoch the y coord data
+        edata[trial]['size'] = edata[trial]['size'][epoch]# epoch the pupil data
+        edata[trial]['time'] = edata[trial]['time'][epoch] - cueind #epoch the timescale too, and rescale relative to the trigger
     edat.append(edata)
 print 'saving processed data in pickle format'
 
