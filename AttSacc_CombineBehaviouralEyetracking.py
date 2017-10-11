@@ -15,20 +15,23 @@ from matplotlib import pyplot as plt
 from pygazeanalyser.edfreader import read_edf
 from pygazeanalyser import gazeplotter
 from scipy import stats, signal, ndimage, interpolate
+from scipy.signal import resample
 import re
 import os
 import mne
 import copy
-import myfunctions
 import cPickle
+workingfolder = '/home/sammirc/Experiments/Nick/AttentionSaccade' #workstation directory
+os.chdir(workingfolder)
+import myfunctions
+
 #from mpl_toolkits.mplot3d import Axes3D
-%matplotlib inline
-#%matplotlib
+#%matplotlib inline
+%matplotlib
 np.set_printoptions(suppress = True)
 #%%
 # set relevant directories and paths
 #workingfolder = '/Users/user/Desktop/Experiments/Nick/AttentionSaccade/' #laptop directory
-workingfolder = '/home/sammirc/Experiments/Nick/AttentionSaccade' #workstation directory
 eyedat        = os.path.join(workingfolder, 'eyes')
 behdat        = os.path.join(workingfolder, 'behaviour/csv')
 eegdat        = os.path.join(workingfolder, 'EEG') #only on workstation though, no eeg data on laptop
@@ -88,7 +91,23 @@ if not os.path.exists(pickname): #if the preprocessed data doesnt exist already,
 
             fname2   = os.path.join(eyedat, 'AttSacc_S%02d%s.asc'%(sublist[sub], parts[1]));  datname2 = os.path.join(behdat, 'AttSacc_S%02d%s.csv'%(sublist[sub], parts[1]))
             bdata2   = pd.DataFrame.from_csv(datname2, header=0, sep = ',', index_col=False); edata2   = read_edf(fname2, EDFSTART, EDFSTOP, missing = np.NaN, debug = False)
-
+        
+        if sublist[sub] == 4: #need to upsample the data to 1Khz as subject 4 collected at 250Hz
+            print('upsampling subject 4')
+            for i in range(len(edata)): #loop through all trials
+                #original length of the vector, and the length that it would be if collected at `1khz (based on trackertime samples)
+                o_length = len(edata[i]['trackertime'])
+                n_length = edata[i]['trackertime'][-1] - edata[i]['trackertime'][0]            
+                edata[i]['x']    = resample(edata[i]['x'], n_length, window = 'boxcar') #resample to actual length of the trial, which equates to 1Khz
+                edata[i]['y']    = resample(edata[i]['y'], n_length, window = 'boxcar') #resample to actual length of the trial, which equates to 1Khz
+                edata[i]['size'] = resample(edata[i]['size'], n_length, window = 'boxcar') #resample to actual length of the trial, which equates to 1Khz
+                edata[i]['time'] = np.arange(1,n_length + 1) #account for zero indexing in this time vector
+                edata[i]['trackertime'] = np.arange(edata[i]['trackertime'][0], edata[i]['trackertime'][-1]+1) #compensate for zero indexing    
+                
+        if sublist[sub] == 5: #in trial 568, the time array is shifted by 1 sample, and skips sample 2762. need to realign ['time'] on this trial
+            #length of trial 568 is 2936
+            edata[568]['time'] = np.arange(0, len(edata[568]['x'])) #set the time to align to length of the trial
+        
         if sublist[sub] in epsubs: #EP locations
             targlocations = np.array([[288,119], # cueloc = 1
                                      [119, 288], # cueloc = 2
@@ -109,14 +128,9 @@ if not os.path.exists(pickname): #if the preprocessed data doesnt exist already,
                                      [165,-399], # cueloc = 7
                                      [399,-165]] # cueloc = 8
                                      )
-
+        
         targlocations[:,0] = targlocations[:,0]+(resxy[0]/2) # correct x from tracker coords to normal coords
         targlocations[:,1] = targlocations[:,1]+(resxy[1]/2) # correct y from tracker coords to normal coords
-        
-        if sub == 4: #this is subject 5. in trial 568, the time array is shifted by 1 sample, and skips sample 2762. need to realign ['time'] on this trial
-            #length of trial 568 is 2936
-            edata[568]['time'] = np.arange(0, len(edata[568]['x'])) #set the time to align to length of the trial
-
         if sub in range(0,2): #subjects 1 and 2 only have one file, not two so script changes accordingly.
             print('combining S%02d eyetracking and behavioural data, and adding triggers to eyetracking data'%(sublist[sub]))
             for trial in range(len(edata)):
