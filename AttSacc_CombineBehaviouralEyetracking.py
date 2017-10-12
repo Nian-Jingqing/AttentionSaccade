@@ -75,7 +75,7 @@ INVALCODE = np.NaN
 ppd = 72 #pixels per degree in current study
 
 #%% combine eyetracking and behavioural data into a master list of dictionaries, and pickle into single file
-pickname = os.path.join(workingfolder, 'preprocessed_eyes_9subs.pickle')
+pickname = os.path.join(workingfolder, 'AttSacc_9subs_Combined_BehavEyeDat.pickle')
 if not os.path.exists(pickname): #if the preprocessed data doesnt exist already, then run preprocessing and joining of behavioural and eye data
     edat = []
     for sub in range(len(sublist)):
@@ -93,7 +93,7 @@ if not os.path.exists(pickname): #if the preprocessed data doesnt exist already,
             bdata2   = pd.DataFrame.from_csv(datname2, header=0, sep = ',', index_col=False); edata2   = read_edf(fname2, EDFSTART, EDFSTOP, missing = np.NaN, debug = False)
         
         if sublist[sub] == 4: #need to upsample the data to 1Khz as subject 4 collected at 250Hz
-            print('upsampling subject 4')
+            print('upsampling subject 4 part 1')
             for i in range(len(edata)): #loop through all trials
                 #original length of the vector, and the length that it would be if collected at `1khz (based on trackertime samples)
                 o_length = len(edata[i]['trackertime'])
@@ -103,7 +103,17 @@ if not os.path.exists(pickname): #if the preprocessed data doesnt exist already,
                 edata[i]['size'] = resample(edata[i]['size'], n_length, window = 'boxcar') #resample to actual length of the trial, which equates to 1Khz
                 edata[i]['time'] = np.arange(1,n_length + 1) #account for zero indexing in this time vector
                 edata[i]['trackertime'] = np.arange(edata[i]['trackertime'][0], edata[i]['trackertime'][-1]+1) #compensate for zero indexing    
-                
+            print('upsampling subject 4 part 2')
+            for i in range(len(edata2)): #loop through all trials
+                #original length of the vector, and the length that it would be if collected at `1khz (based on trackertime samples)
+                o_length = len(edata2[i]['trackertime'])
+                n_length = edata2[i]['trackertime'][-1] - edata2[i]['trackertime'][0]            
+                edata2[i]['x']    = resample(edata2[i]['x'], n_length, window = 'boxcar') #resample to actual length of the trial, which equates to 1Khz
+                edata2[i]['y']    = resample(edata2[i]['y'], n_length, window = 'boxcar') #resample to actual length of the trial, which equates to 1Khz
+                edata2[i]['size'] = resample(edata2[i]['size'], n_length, window = 'boxcar') #resample to actual length of the trial, which equates to 1Khz
+                edata2[i]['time'] = np.arange(1,n_length + 1) #account for zero indexing in this time vector
+                edata2[i]['trackertime'] = np.arange(edata2[i]['trackertime'][0], edata2[i]['trackertime'][-1]+1) #compensate for zero indexing  
+                  
         if sublist[sub] == 5: #in trial 568, the time array is shifted by 1 sample, and skips sample 2762. need to realign ['time'] on this trial
             #length of trial 568 is 2936
             edata[568]['time'] = np.arange(0, len(edata[568]['x'])) #set the time to align to length of the trial
@@ -333,13 +343,28 @@ if not os.path.exists(pickname): #if the preprocessed data doesnt exist already,
     edata = copy.deepcopy(edat) #so don't have to rerun preprocessing but instead can reload edat below
     print 'done'
 else:
-    print 'loading preprocessed data from pickle'
+    print 'loading combined data from pickle'
     with open(os.path.join(workingfolder, pickname), 'rb') as handle:
         edat = cPickle.load(handle)
         print 'done!'
 
-print 'saving processed data in pickle format'
+print 'saving combined data in pickle format'
 with open(os.path.join(workingfolder, pickname), 'w') as handle:
     cPickle.dump(edat, handle)
 print 'done!'    
-#%%
+#%% interpolate x and y over blink periods
+
+pickname_clean = os.path.join(workingfolder, 'AttSacc_9subs_cleanedxy_BehavEyeDat.pickle')
+for sub in range(len(edat)):
+    print('interpolating blinks in subject %s' %(sublist[sub]))
+    for trl in range(len(edat[sub])):
+        myfunctions.interpolateBlinks(edat[sub][trl])
+
+
+print 'saving interpolated data in pickle format'
+with open(os.path.join(workingfolder, pickname_clean), 'w') as handle:
+    cPickle.dump(edat, handle)
+print 'done!'    
+
+
+
