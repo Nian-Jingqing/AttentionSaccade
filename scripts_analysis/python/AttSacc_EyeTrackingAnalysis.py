@@ -155,19 +155,75 @@ for sub in range(len(edat)):
         
 #%%
 #plot of example trial to send to Nick for help
+        
+        
+# from quinn:
+#  take the first derivative of the trace as a measure of velocity
+#  the rising edge of the saccade will peak at the peak velocity, and will then go very negative very quickly as it settles onto a fixed point
+#  take the absolute of the first derivative so this is more of an inverted v shape
+#  when velocity then settles, gaze can be assumed to be 'fixed' as distance from target is being held constant
+#  a second similarly large peak in velocity will be seen upon the saccade back to fixation (if this is captured within the trial limits)
+#  if two peaks, you can take the average of the distance metric between these two peaks to get where people are looking during the fixation period   
 
-dummy     = copy.deepcopy(edat[1])
+dummy     = copy.deepcopy(edat[2])
 sacctask  = [x for x in range(len(dummy)) if dummy[x]['behaviour']['task'] == 2.0]
-dist2fix  = dummy[sacctask[5]]['dist2fix']
-dist2targ = dummy[sacctask[5]]['dist2targ']
-targpos = dummy[sacctask[5]]['behaviour']['targlocpix'].tolist()
+#%%  1.22pm 17/10/2016 - this section of code will work and will identify the distance from target after the saccade has been made (i.e. first fixation)
+plt.close('all')
+trl = 65
+
+arrind    = dummy[sacctask[trl]]['triggers']['array'][1] 
+fsacind   = dummy[sacctask[trl]]['behaviour']['fsac'][0]- dummy[sacctask[trl]]['behaviour']['fstime']
+
+dist2fix  = dummy[sacctask[trl]]['dist2fix']
+dist2targ = dummy[sacctask[trl]]['dist2targ']
+
+diffd2t   = np.abs(np.diff(dist2targ))
+meddiff   = np.nanmedian(diffd2t[fsacind-150:fsacind])
+
+
+targpos = dummy[sacctask[trl]]['behaviour']['targlocpix'].tolist()
 
 targdistfromfix = myfunctions.Eucdist(targpos[0], targpos[1], fixpos[0], fixpos[1])
 
 
-arrind    = dummy[sacctask[5]]['triggers']['array'][1] 
-fsacind   = dummy[sacctask[5]]['behaviour']['fsac'][0]- dummy[sacctask[5]]['behaviour']['fstime']
+#find samples where the velocity is above this threshold (10 x median of baseline) and within 100ms of the saccade starting
+velinds = [x for x in range(len(diffd2t)) if diffd2t[x] >= 10*meddiff and x in np.arange(fsacind,fsacind+100)]
 
+
+plt.figure()
+plt.plot(diffd2t, color = '#41ab5d', label = 'absolute value of 1st derivative')
+plt.axvline(fsacind, color = '#4292c6', ls = 'dashed', label = 'onset of saccade')
+plt.xlim([fsacind-50, None])
+plt.axhline(meddiff*10, color = 'black',  ls = 'dashed', label = '10 x median pre-saccade')
+plt.axvline(velinds[0], color = '#bdbdbd', ls = 'dashed', label = 'first sample crossing vel thresh')
+plt.axvline(velinds[-1], color = '#bdbdbd' , ls = 'dashed', label =  'last sample crossing vel thresh'); plt.legend(loc = 1)
+plt.title('velocity profile after saccade initiation')
+plt.savefig(os.path.join(workingfolder, 'exampletrial_gazevelocitypostsaccade_detection.png') )
+
+
+
+plt.figure()
+plt.plot(dist2targ,   color = '#de2d26',                 label = 'distance of gaze to target')
+plt.axvline(fsacind,  color = '#4292c6',  ls = 'dashed', label = 'onset of saccade')
+plt.axvline(velinds[0],     color = '#bdbdbd',  ls = 'dashed', label = 'first sample crossing vel thresh')
+plt.axvline(velinds[-1],     color = '#bdbdbd' , ls = 'dashed', label =  'last sample crossing vel thresh'); plt.legend(loc = 1)
+plt.axvline(velinds[-1]+100, color = '#2c7fb8',  ls = 'dashed', label = '100ms after velocity is back to normal')
+plt.axhline(np.nanmedian(dist2targ[velinds[-1]:velinds[-1]+100]), ls = 'dashed', color = 'black', label = 'median of 100ms after velocity drops')
+plt.xlim([fsacind-50, None])
+plt.title('profile of distance from target after saccade')
+plt.savefig(os.path.join(workingfolder, 'exampletrial_distancefromtargetpostsaccade_detectgazefix.png') )
+
+
+
+#%%
+plt.figure();
+plt.plot(dist2targ,   color = '#41ab5d', label = 'distance from target');
+plt.axvline(arrind,  color = '#bdbdbd', ls = 'dashed', label = 'onset of array')
+plt.axvline(fsacind, color = '#4292c6', ls = 'dashed', label = 'onset of saccade')
+plt.legend(loc = 4)
+plt.xlim([arrind-150,fsacind+150])
+plt.title('euclidian distance of gaze from target (in pixels)')
+#plt.savefig(os.path.join(workingfolder, 'exampletrial_distancefromtarget.png') )
 
 
 plt.figure();
@@ -178,58 +234,12 @@ plt.axhline(targdistfromfix, color = '#ef3b2c', ls = 'dashed', label = 'dist of 
 plt.legend(loc = 4)
 plt.xlim([1800,2360])
 plt.title('euclidian distance of gaze from fixation (in pixels)')
-plt.savefig(os.path.join(workingfolder, 'exampletrial_distancefromfixation.png') )
-
-
-plt.figure();
-plt.plot(dist2targ,   color = '#41ab5d', label = 'distance from target');
-plt.axvline(arrind,  color = '#bdbdbd', ls = 'dashed', label = 'onset of array')
-plt.axvline(fsacind, color = '#4292c6', ls = 'dashed', label = 'onset of saccade')
-plt.legend(loc = 4)
-plt.xlim([1800,2360])
-plt.title('euclidian distance of gaze from target (in pixels)')
-plt.savefig(os.path.join(workingfolder, 'exampletrial_distancefromtarget.png') )
+#plt.savefig(os.path.join(workingfolder, 'exampletrial_distancefromfixation.png') )
 
 
 
 
 
-
-
-
-
-
-
-
-
-
-
-#%%
-
-
-# need to go through trials and check the saccades that have been made
-
-dummy = copy.deepcopy(edat[2])
-
-sacctask = [x for x in range(len(dummy)) if dummy[x]['behaviour']['task'] == 2.0]
-tmptrl = copy.deepcopy(dummy[sacctask[0]])
-    
-plt.figure();
-plt.plot(tmptrl['x'])
-plt.axvline(tmptrl['triggers']['cue'][1], ls = 'dashed', color = '#fc9272')
-plt.axvline(tmptrl['triggers']['array'][1], ls = 'dashed', color = '#636363')
-plt.axvline(tmptrl['behaviour']['fsac'][0]-tmptrl['behaviour']['fstime'], ls = 'dashed', color = '#3182bd')
-
-
-
-
-
-plt.figure();
-plt.plot(edat[1][sacctask[5]]['dist2targ'], label = 'eucdist raw')
-#plt.plot(np.diff(edat[1][sacctask[5]]['dist2targ']), color = 'red', label = 'diff')
-plt.axvline(x = 1831, ls = 'dashed', color = '#636363')
-plt.axvline(x = 2066, ls = 'dashed', color = '#636363')
-plt.legend(loc = 4)
 
 
 
