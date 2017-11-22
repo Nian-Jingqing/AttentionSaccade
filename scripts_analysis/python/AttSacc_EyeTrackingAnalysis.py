@@ -172,6 +172,92 @@ for sub in range(len(edat)):
         inds         = [x for x in gazevel
                         if gazevel[x] >=*10]
 
+#%%
+
+for sub in range(len(edat)):
+    sacctask = [x for x in range(len(edat[sub]))
+                if edat[sub][x]['behaviour']['task'] == 2.0]:
+    for sacctrl in sacctask:
+        # get some trial info
+        d2t          = edat[sub][sacctrl]['dist2targ']
+        arrind       = edat[sub][sacctrl]['triggers']['array'][1]
+        x            = edat[sub][sacctrl]['x']
+        y            = edat[sub][sacctrl]['y']
+        
+        #calculate some things
+        gazevel_abs  = np.abs(np.diff(d2t)) #absolute velocity of gaze
+        gazevel      = np.diff(d2t)         # signed velocity (-ve = closer to target, +ve = further from target)
+        baseline     = np.nanmedian(gazevel_abs[arrind-100:arrind]) #take baseline velocity from pre-target, should be fixated here
+        
+        #calculate thresholds for peak detection
+        velthresh    = 0.8 #percentage of maximum velocity that must be exceeded to be classified as saccade      
+        velrange_neg = min(gazevel) - baseline
+        neg_thresh   = velthresh*velrange_neg
+        velrange_pos = max(gazevel) - baseline
+        pos_thresh   = velthresh*velrange_pos
+        
+        #get indices of peaks in the velocity signal
+        peaks_neg = [x for x in range(len(gazevel))
+                     if gazevel[x] < neg_thresh     # velocity lower than the negative threshold
+                     and x > arrind]                # after the target appeared (ignore things before, which could be blinks too)
+        peaks_pos = [x for x in range(len(gazevel))
+                     if gazevel[x] > pos_thresh     # velocity higher than positive threshold
+                     and x > arrind]                # after the target appeared
+                     
+        sac_on = peaks_neg[0] #first saccade detected by breach of threshold, onset is ~ 15 samples (ms) before this
+        saccade_onset = sac_on - 15 # the peak is essentially the middle of the falling edge, 15ms before this is onset (when it starts moving)
+        
+        fixed_edist = np.nanmedian(dist2targ[sac_on+30:sac_on+130]) #take 100ms after saccade has stopped (gaze fixed here)
+        fixed_x     = np.nanmedian(x[sac_on+30:sac_on+130])         # get x of this fixed window
+        fixed_y     = np.nanmedian(y[sac_on+30:sac_on+130])         # get y of this fixed window
+
+
+#%%
+sub[sacctask[trial]]['behaviour']['validity'] #valid or invalid trial
+#get some trial info
+dist2targ   = sub[sacctask[trial]]['dist2targ']
+arrind      = sub[sacctask[trial]]['triggers']['array'][1]
+
+gazevel_abs = np.abs(np.diff(dist2targ))
+gazevel     = np.diff(dist2targ)
+
+baseline    = np.nanmedian(gazevel_abs[arrind-100:arrind])
+
+velrange_neg    = min(gazevel) - baseline
+neg_thresh      = 0.8*velrange_neg 
+
+velrange_pos    = max(gazevel) - baseline
+pos_thresh      = 0.8*velrange_pos
+
+peaks_neg = [x for x in range(len(gazevel)) if gazevel[x] < neg_thresh]
+peaks_pos = [x for x in range(len(gazevel)) if gazevel[x] > pos_thresh]
+
+sac_on    = peaks_neg[0] 
+
+plt.figure()
+plt.plot(dist2targ)
+plt.axvline(arrind, ls = 'dashed', color = '#636363')
+plt.axhline(np.nanmedian(dist2targ[peaks_neg[0]+30:peaks_neg[0]+130]), ls = 'dashed', color = '#31a354', label = 'post-onset nan median')
+plt.axvline(peaks_neg[0]+30 , ls = 'dashed', color = '#addd8e')
+plt.axvline(peaks_neg[0]+130, ls = 'dashed', color = '#addd8e')
+plt.axhline(np.nanmedian(dist2targ[peaks_neg[0]+15:peaks_pos[0]-15 ]) , ls = 'dashed', color = '#d95f0e', label = 'between-peak nan median')
+plt.axvline(peaks_neg[0]+15 , ls = 'dashed', color = '#fec44f')
+plt.axvline(peaks_pos[0]-15, ls = 'dashed', color = '#fec44f')
+plt.xlim([arrind-100,None])
+plt.title('trial %s'%trial)
+plt.legend(loc = 4)
+
+
+plt.figure()
+plt.title('trial %s'%trial)
+plt.plot(gazevel, color = '#756bb1', label = 'gaze velocity')
+plt.axvline(arrind, color = '#3182bd', ls = 'dashed', label = 'target onset')
+plt.axvline(peaks_neg[0]+30 , ls = 'dashed', color = '#addd8e')
+for i in peaks_pos:
+    plt.axvline(i, ls = 'dashed', color = '#bdbdbd')
+plt.xlim([arrind-100, None])
+plt.legend(loc=2)
+
 
 
 #%%
@@ -406,10 +492,6 @@ peaks_neg = [x for x in range(len(gazevel)) if gazevel[x] < neg_thresh]
 peaks_pos = [x for x in range(len(gazevel)) if gazevel[x] > pos_thresh]
 
 sac_on    = peaks_neg[0] 
-
-
-
-
 
 plt.figure()
 plt.plot(dist2targ)
