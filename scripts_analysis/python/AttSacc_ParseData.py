@@ -192,17 +192,87 @@ for i in range(len(start_inds)): #get trialwise data
     Eblk.append(itrl_eblk)
     Msg.append(itrl_events)
 
+
+rep_inds  = np.repeat(np.arange(nblocks),trialsperblock)
+#plt.hist(rep_inds, bins = nblocks) # all bars should be the same height now if its work? @ trials per block (80)
+   
+
+iblock = {
+'trackertime': [],
+'av_x': [], 'av_y': [], 'av_p': [],
+'lx'  : [], 'ly'  : [], 'lp'  : [],
+'rx'  : [], 'ry'  : [], 'rp'  : [],
+'Efix': [], 'Sfix': [],
+'Esac': [], 'Ssac': [],
+'Eblk': [], 'Sblk': [],
+'Msg' : []
+}
+dummy = copy.deepcopy(iblock)
+blocked_data = np.repeat(dummy, nblocks)
+
+
+
+for i in np.arange(nblocks):
+    inds = np.squeeze(np.where(rep_inds == i))
+    iblock_data = copy.deepcopy(iblock)
+    for ind in inds: #add trialwise info into the blocked structure, continuous data rather than sectioned
+        iblock_data['trackertime'].append(trackertime[ind])
+        iblock_data['av_x'].append(av_x[ind])
+        iblock_data['av_y'].append(av_y[ind])
+        iblock_data['av_p'].append(av_p[ind])
+        iblock_data['lx'].append(lx[ind])
+        iblock_data['ly'].append(ly[ind])
+        iblock_data['lp'].append(lp[ind])
+        iblock_data['rx'].append(rx[ind])
+        iblock_data['ry'].append(ry[ind])
+        iblock_data['rp'].append(rp[ind])
+        iblock_data['Efix'].append(Efix[ind])
+        iblock_data['Sfix'].append(Sfix[ind])
+        iblock_data['Esac'].append(Esac[ind])
+        iblock_data['Ssac'].append(Ssac[ind])
+        iblock_data['Eblk'].append(Eblk[ind])
+        iblock_data['Sblk'].append(Sblk[ind])
+        iblock_data['Msg'].append(Msg[ind])
+        blocked_data[i] = iblock_data
+        
+
+# this is the structure of blocked_data:
+# len(blocked_data) = nblocks
+# len(blocked_data[block])                    = 17 (17 variables within it, e.g. trackertime)
+# len(blocked_data[block]['variable'])        = ntrials
+# len(blocked_data[block]['variable'][trial]) = trial length
+
+for block in range(len(blocked_data)): #concatenate trialwise signals into whole block traces to make artefact removal easier
+    blocked_data[block]['trackertime'] = np.hstack(blocked_data[block]['trackertime'])
+    blocked_data[block]['av_x']        = np.hstack(blocked_data[block]['av_x']       )
+    blocked_data[block]['av_y']        = np.hstack(blocked_data[block]['av_y']       )
+    blocked_data[block]['av_p']        = np.hstack(blocked_data[block]['av_p']       )
+    blocked_data[block]['lx']          = np.hstack(blocked_data[block]['lx']         )
+    blocked_data[block]['ly']          = np.hstack(blocked_data[block]['ly']         )
+    blocked_data[block]['lp']          = np.hstack(blocked_data[block]['lp']         )
+    blocked_data[block]['rx']          = np.hstack(blocked_data[block]['rx']         )
+    blocked_data[block]['ry']          = np.hstack(blocked_data[block]['ry']         )
+    blocked_data[block]['rp']          = np.hstack(blocked_data[block]['rp']         )
+
+
+temp = copy.deepcopy(blocked_data)
+for block in range(len(temp)):
+    temp_ttime = temp[block]['trackertime']
+    lx = temp[block]['lx']
+    ly = temp[block]['ly']
+    lp = temp[block]['lp']
+    rx = temp[block]['rx']
+    ry = temp[block]['ry']
+    rp = temp[block]['rp']
+
+
     
-
-
-
-
-
-
-
-
-
-
-
-#fsamp_rec = split_d[fstart_ind][1] #this is the sample value for the first record start of the file
+plt.figure()
+plt.plot(blocked_data[1]['trackertime'], blocked_data[1]['lx'], color = 'green')
+plt.plot(blocked_data[1]['trackertime'], blocked_data[1]['rx'], color = 'blue')
+for i in range(len(blocked_data[1]['Sblk'])):
+    if len(blocked_data[1]['Sblk'][i]) > 0:
+        for blink in range(len(blocked_data[1]['Sblk'][i])):
+            plt.axvline(int(blocked_data[1]['Sblk'][i][blink][2]), ls = 'dashed', color = 'red')
+    
 
