@@ -3,17 +3,17 @@ close all;
 clc;
 %%
 datafolder = '/home/sammirc/Experiments/Nick/AttentionSaccade/behaviour'; %workstation data directory
-datafolder = '/Users/user/Desktop/Experiments/Nick/AttentionSaccade/behaviour'; % laptop data directory
+% datafolder = '/Users/user/Desktop/Experiments/Nick/AttentionSaccade/behaviour'; % laptop data directory
 cd(datafolder);
 
-sublist = [1,2,3,4,5,6,7,8,9];
-%sublist = [4,5,6,7,8,9];
+sublist = [1,2,3,4,5,6,7,8,9,10,11,12,13];
+
 parts   = ['a','b'];
 nsub = length(sublist);
 %%
 for isub = 1:length(sublist)
     fprintf('\nWorking on S%02d/%02d.',isub,length(sublist));
-    if ismember(isub, [1,2])
+    if ismember(sublist(isub), [1,2])
         fname = sprintf('%s/AttSacc_S%02d.mat', datafolder, sublist(isub));
         data = load(fname, 'participant', 'sequence', 'response');
         iblocks = 1:length(data.response);
