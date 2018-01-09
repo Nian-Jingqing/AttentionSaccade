@@ -59,9 +59,9 @@ lowsamp_subs = [4]
 list_fnames = sorted(os.listdir(os.path.join(eyedat, 'raw_data')))
     
 #%%
-for i in range(len(list_fnames)): # iterate over all files in the raw data folder
-    print 'working on file %02d/%02d' %(i+1, len(list_fnames))
-    fname = list_fnames[i] #get file name
+for fileid in range(len(list_fnames)): # iterate over all files in the raw data folder
+    print 'working on file %02d/%02d' %(fileid+1, len(list_fnames))
+    fname = list_fnames[fileid] #get file name
     
     d = open(os.path.join(eyedat, 'raw_data', fname), 'r') #io open the file
     raw_d = d.readlines() #read the data from file 
@@ -75,17 +75,20 @@ for i in range(len(list_fnames)): # iterate over all files in the raw data folde
     #get all the inds for lines where 'START  TSTAMP ....' is seen (this is the start of a recording)
     #if somebody has stopped/started the recording at every trial, then len(start_inds) should be the number of trials
     # e.g. here, len(start_inds == 1920)
-    start_inds = [x for x in range(len(split_d)) if len(split_d[x]) == 6 and split_d[x][0] == 'START'] 
+    start_inds = [x for x in range(len(split_d)) if len(split_d[x]) == 6 and split_d[x][0] == 'START']
+    if fname == 'AttSacc_S03.asc': start_inds = start_inds[0:960]
     len(start_inds)
     fstart_ind = start_inds[0] #first time that the start recording message is seen
     
     end_inds   = [x for x in range(len(split_d)) if len(split_d[x]) == 7 and split_d[x][0] == 'END']
+    if fname == 'AttSacc_S03.asc': end_inds = end_inds[0:960]
     len(end_inds) # again, if stopped/started recording for each trial, then len(end_inds) == n(trials)
     trig_ends = np.add(end_inds, 1) # add 1 to get the line where the trigger for end of a trial is sent
     fend_ind      = end_inds[-1] 
     fend_trig_ind = fend_ind + 1 
     
-    ntrials, trialsperblock = 1920, 80
+    if fileid in [0,1]: ntrials, trialsperblock = 1920, 80
+    else: ntrials, trialsperblock = 960, 80
     nblocks = ntrials/trialsperblock
     trackertime = []
     lx   = []; rx   = []
@@ -248,7 +251,8 @@ for i in range(len(list_fnames)): # iterate over all files in the raw data folde
         blocked_data[block]['rp']          = np.hstack(blocked_data[block]['rp']         )
         
     # # # # save subject data (trials concatenated into blocks) to pickle file to read in to next script
-        
+    
+    print 'saving blocked data to pickle'    
     pickname = fname.split('.')[0] + '_blocked.pickle' #remove the previous file ending (.asc), and add new one
     with open(os.path.join(workingfolder, eyedat, 'blocked_data', pickname), 'w') as handle:
         cPickle.dump(blocked_data, handle)
