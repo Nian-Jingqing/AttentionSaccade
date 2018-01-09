@@ -18,6 +18,7 @@ import os
 import copy
 import cPickle
 workingfolder = '/home/sammirc/Experiments/Nick/AttentionSaccade' #workstation directory
+workingfolder = '/Users/user/Desktop/Experiments/Nick/AttentionSaccade' #laptop directory
 os.chdir(workingfolder)
 import myfunctions
 
@@ -30,10 +31,6 @@ n_cores = multiprocessing.cpu_count() #8 cores on workstation
 #%%
 
 eyedat        = os.path.join(workingfolder, 'eyes')
-behdat        = os.path.join(workingfolder, 'behaviour/csv')
-behlist       = np.sort(os.listdir(behdat))
-
-
 sublist = [1, 2, 3, 4, 5, 6, 7, 8, 9]
 
 parts   = ['a','b']
@@ -50,13 +47,13 @@ list_fnames = sorted(os.listdir(os.path.join(eyedat, 'blocked_data')))
 for fid in range(len(list_fnames)):
     print 'working on file %02d/%02d' %(fid+1, len(list_fnames))
 #%%
-
+fid = 0
 #load in the blocked data    
 fname = list_fnames[fid]
 print '\n loading blocked data from pickle'
 with open(os.path.join(eyedat, 'blocked_data', fname), 'rb') as handle:
     ds = cPickle.load(handle)
-print
+print 'finished loading data'
 
 # ds contains the data for this file. it is a list of dictionaries len(ds) = nblocks for the file
 # keys for each block dictionary are:
@@ -129,11 +126,134 @@ for i in range(len(blinks)):
     plt.axvline(blink[3], color = 'grey', ls = 'dashed')
     plt.axvline(int(blink[3])+40, color = '#ca0020', ls = '--')
 
+"""basically if you plot these figures, you see one case where the output
+from the eyelink says there's a blink, but it started substantially earlier
+this means that the blink detection from SR research is going to be a little
+unreliable, and it's best to generate your own code to do this
 
+the best way of doing this is probably just identifying series of missing
+samples in the data (absence of value = blink) and creating a log of them.
+then probably plot these and see if better.
+
+
+to be fair though, credit to them, it's mostly ok'
+"""
+temp = copy.deepcopy(ds[0]) #create a new, temporary variable for one block of data
 #%%
 
+mlx = np.array(np.isnan(temp['lx']) == True, dtype = int)
+dlx = np.diff(mlx)
+s_lx = np.squeeze(np.where(dlx ==  1))
+e_lx = np.squeeze(np.where(dlx == -1))
 
 
+mly = np.array(np.isnan(temp['ly']) == True, dtype = int)
+dly = np.diff(mly)
+s_ly = np.squeeze(np.where(dly ==  1))
+e_ly = np.squeeze(np.where(dly == -1))
+
+mrx = np.array(np.isnan(temp['rx']) == True, dtype = int)
+drx = np.diff(mrx)
+s_rx = np.squeeze(np.where(drx ==  1))
+e_rx = np.squeeze(np.where(drx == -1))
+
+mry = np.array(np.isnan(temp['ry']) == True, dtype = int)
+dry = np.diff(mry)
+s_ry = np.squeeze(np.where(dry ==  1))
+e_ry = np.squeeze(np.where(dry == -1))
+
+mx  = np.array((mlx+mrx) == 2, dtype = int)
+dx  = np.diff(mx)
+s_x = np.squeeze(np.where(dx ==  1))
+e_x = np.squeeze(np.where(dx == -1))
+
+#the left x and left y should be missing the same periods of data
+#right x and right y should be missing the same periods of data
+
+#turn these data into blink events for right and left eyes
+
+Eblk_lx = []; Eblk_ly = []
+Eblk_rx = []; Eblk_ry = []
+
+#left x
+for i in range(len(s_lx)):
+    start = s_lx[i]
+    if i < len(e_lx): #check within range of the number of missing periods in data
+        end = e_lx[i]
+    elif i == len(e_lx):
+        end = e_lx[-1]
+    else:
+        end = e_lx[-1]
+    ttime_start = temp['trackertime'][start]
+    ttime_end   = temp['trackertime'][end]
+    dur = end-start
+    #create a blink event structure:
+    # blink_code, start (blocktime), end (blocktime), start_trackertime, end_trackertime, duration
+    evnt = ['LX_BLK', start, end, ttime_start, ttime_end, dur]
+    Eblk_lx.append(evnt)
+
+#left y
+for i in range(len(s_ly)):
+    start = s_ly[i]
+    if i < len(e_ly): #check within range of the number of missing periods in data
+        end = e_ly[i]
+    elif i == len(e_ly):
+        end = e_ly[-1]
+    else:
+        end = e_ly[-1]
+    ttime_start = temp['trackertime'][start]
+    ttime_end   = temp['trackertime'][end]
+    dur = end-start
+    #create a blink event structure:
+    # blink_code, start (blocktime), end (blocktime), start_trackertime, end_trackertime, duration
+    evnt = ['LY_BLK', start, end, ttime_start, ttime_end, dur]
+    Eblk_ly.append(evnt)
+
+#right x
+for i in range(len(s_rx)):
+    start = s_rx[i]
+    if i < len(e_rx): #check within range of the number of missing periods in data
+        end = e_rx[i]
+    elif i == len(e_rx):
+        end = e_rx[-1]
+    else:
+        end = e_rx[-1]
+    ttime_start = temp['trackertime'][start]
+    ttime_end   = temp['trackertime'][end]
+    dur = end-start
+    #create a blink event structure:
+    # blink_code, start (blocktime), end (blocktime), start_trackertime, end_trackertime, duration
+    evnt = ['RX_BLK', start, end, ttime_start, ttime_end, dur]
+    Eblk_rx.append(evnt)
+
+#right y
+for i in range(len(s_ry)):
+    start = s_ry[i]
+    if i < len(e_ry): #check within range of the number of missing periods in data
+        end = e_ry[i]
+    elif i == len(e_ry):
+        end = e_ry[-1]
+    else:
+        end = e_ry[-1]
+    ttime_start = temp['trackertime'][start]
+    ttime_end   = temp['trackertime'][end]
+    dur = end-start
+    #create a blink event structure:
+    # blink_code, start (blocktime), end (blocktime), start_trackertime, end_trackertime, duration
+    evnt = ['RY_BLK', start, end, ttime_start, ttime_end, dur]
+    Eblk_ry.append(evnt)
+
+
+
+
+
+#quickly just check this section to see how accurate
+#plt.figure()
+#plt.plot(temp['trackertime'], temp['lx'], ls = '-')
+#for i in range(len(Eblk_lx)):
+#    plt.axvline(Eblk_lx[i][3], ls = '--', color = '#636363')
+#    plt.axvline(Eblk_lx[i][4], ls = '--', color = '#636363')
+#%%
 
 
 
