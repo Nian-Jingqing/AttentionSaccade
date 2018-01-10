@@ -341,8 +341,13 @@ for i in range(len(s_ry)):
 #    plt.axvline(Eblk_lx[i][4], ls = '--', color = '#636363')
 #%%
 
+#in my interpolation function, it takes start-80, start-40, end+40, end+80ms around the blink
+#just plot some figures to explore whether this is still sufficient. can possible extend this now using the continuous data.
+#one thing to maybe think about is a pca approach to removing them. this could be a good idea, and maybe remove less of the signal around it
 
 
+
+#%%
 
 
 plt.figure()
@@ -358,14 +363,6 @@ for i in range(len(ds[0]['Eblk'])):
             plt.axvline(start, ls = 'dashed', color = 'red')
             plt.axvline(end, ls = 'dashed', color = 'grey')
     elif len(ds[0]['Eblk'])
-
-
-
-
-
-
-
-
 
 
 plt.figure()
