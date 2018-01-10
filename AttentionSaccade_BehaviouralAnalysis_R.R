@@ -17,7 +17,6 @@ ds <- df %>%
   dplyr::group_by(subject, validity) %>%
   summarise_at(.vars = c('time', 'corr'), funs(mean, sd)) %>%
   as.data.frame()
-  
 
 ds.plot <- ds %>%
   dplyr::group_by(validity) %>% dplyr::select(-subject) %>%
@@ -26,13 +25,28 @@ ds.plot <- ds %>%
 #figure showing reaction time results
 ggplot(ds.plot, aes(x = validity, y = time_mean_mean, fill = validity)) + 
   geom_bar(stat = 'identity', width = 0.7, position = position_dodge()) +
-  geom_errorbar(aes(x = validity, ymin = time_mean_mean-2*time_sd_se, ymax = time_mean_mean + 2*time_sd_se), width =0.35, position = position_dodge(0.7)) +
+  geom_errorbar(aes(x = validity, ymin = time_mean_mean-2*time_mean_se, ymax = time_mean_mean + 2*time_mean_se), width =0.35, position = position_dodge(0.7)) +
   theme_bw() + labs(x = 'Cue validity', y = 'mean RT (s)') +
-  geom_point(data = ds, aes(x = validity, y = time_mean)) #overlay single subject data onto plot
+  geom_point(data = ds, aes(x = validity, y = time_mean, color = subject)) #overlay single subject data onto plot
 
 #figure for accuracy results
 ggplot(ds.plot, aes(x = validity, y = corr_mean_mean, fill = validity)) + 
   geom_bar(stat = 'identity', width = 0.7, position = position_dodge()) +
-  geom_errorbar(aes(x = validity, ymin = corr_mean_mean-2*corr_sd_se, ymax = corr_mean_mean + 2*corr_sd_se), width =0.35, position = position_dodge(0.7)) +
+  geom_errorbar(aes(x = validity, ymin = corr_mean_mean-2*corr_mean_se, ymax = corr_mean_mean + 2*corr_mean_se), width =0.35, position = position_dodge(0.7)) +
   theme_bw() + labs(x = 'Cue validity', y = 'mean proportion correct') +
-  geom_point(data = ds, aes(x = validity, y = corr_mean)) #overlay single subject data onto plot
+  geom_point(data = ds, aes(x = validity, y = corr_mean, color = subject)) + #overlay single subject data onto plot
+  geom_line(data = ds, aes(x = validity, y = corr_mean, color = subject, group = subject))
+
+# - - - - - - - - - - - - -
+
+
+
+
+
+
+
+
+
+
+
+
