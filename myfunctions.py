@@ -22,7 +22,60 @@ def Eucdist(x1, y1, x2, y2):
     """
     distance = np.sqrt( (x2-x1)**2 + (y2-y1)**2)
     return distance
+ 
+
+def interpolateBlinks_Blocked(block):
+
+    """
+    - This function will interpolate the blinks in eyelink data that is in blocks (longer continuous segments)
+    - The data that it will handle can either be segmented trials (due to trialwise stop/start of recording in the task) stitched back together
+    - or just continuous block data, depending on the structure you give it.
+        
+    - If you use the script AttSacc_ParseData.py to parse the data, and are running AttSacc_CleanBlockedData.py, then the block structure should be suitable for this function.
     
+    <block> will expect a dictionary that has the following fields:
+    - trackertime: the timeseries of timepoints defined by the eyelink time, rather than trial time
+    - lx      - timeseries of the x value for the left eye
+    - ly      - timeseries of the y value for the left eye
+    - rx      - timeseries of the x value for the right eye
+    - ry      - timeseries of the y value for the right eye
+    
+    - Eblk_lx - list of events characterising missing periods of data in lx
+    - Eblk_rx - list of events characterising missing periods of data in rx
+    - Eblk_ly - list of events characterising missing periods of data in ly
+    - Eblk_ry - list of events characterising missing periods of data in ry
+    ----------- these blink structures have the following format:
+    ----------- ['Event_code', start_blocktime, end_blocktime, start_trackertime, end_trackertime, duration]
+    ----------- block code e.g. 'LX_BLK'
+        
+    
+    Missing periods of data will be removed in the following way:
+    
+    periods of missing data of under 10 samples will be linearly interpolated within a window of 10 samples either side of the start and end of the period
+    
+    
+        
+    """
+    
+    lx = block['lx']
+    ly = block['ly']
+    rx = block['rx']
+    ry = block['ry']
+    
+    Eblk_lx = block['Eblk_lx']
+    Eblk_ly = block['Eblk_ly']
+    Eblk_rx = block['Eblk_rx']
+    Eblk_ry = block['Eblk_ry']
+    
+    #sort the blink structures by onset time
+    Eblk_lx = Eblk_lx[:,1:-1] #remove the first column event code as its a string
+    Eblk_lx.astype(float) #change strings to floats, keep as array
+
+
+
+
+
+   
 def interpolateBlinks(trial, kind = 'cubic'):
     
     """
