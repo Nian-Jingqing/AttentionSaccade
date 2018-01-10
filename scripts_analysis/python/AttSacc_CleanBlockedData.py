@@ -80,30 +80,115 @@ print 'finished loading data'
 
 # perform artefact removal on the blocked signals, and show figures verifying quality of the signal removal
 
+#%% find missing periods relating to blinks, in each separate trace and add an event structure to the data
+"""
+don't need to do this for pupil as for each trace in gaze we should also interpolate appropriate areas in
+the pupil trace of the appropriate eye """
+
+for block in range(len(ds)): #loop through all blocks of the data
+    #find missing data in each gaze trace (left x & y, right x & y) separately for precision
+    mlx = np.array(np.isnan(ds[block]['lx']) == True, dtype = int) # array of 1's and 0's for if data is missing at that time point
+    dlx = np.diff(mlx) #find change-points, +1 means goes from present to absent, -1 from absent to present
+    s_lx = np.squeeze(np.where(dlx ==  1)) #find points where it starts to be missing
+    e_lx = np.squeeze(np.where(dlx == -1)) #find points where it stops being missing
+    
+    mly = np.array(np.isnan(ds[block]['ly']) == True, dtype = int)
+    dly = np.diff(mly)
+    s_ly = np.squeeze(np.where(dly ==  1))
+    e_ly = np.squeeze(np.where(dly == -1))
+    
+    mrx = np.array(np.isnan(ds[block]['rx']) == True, dtype = int)
+    drx = np.diff(mrx)
+    s_rx = np.squeeze(np.where(drx ==  1))
+    e_rx = np.squeeze(np.where(drx == -1))
+    
+    mry = np.array(np.isnan(ds[block]['ry']) == True, dtype = int)
+    dry = np.diff(mry)
+    s_ry = np.squeeze(np.where(dry ==  1))
+    e_ry = np.squeeze(np.where(dry == -1))
+
+    Eblk_lx = []; Eblk_ly = []
+    Eblk_rx = []; Eblk_ry = []
+    #left x
+    for i in range(len(s_lx)):
+        start = s_lx[i]
+        if i < len(e_lx): #check within range of the number of missing periods in data
+            end = e_lx[i]
+        elif i == len(e_lx):
+            end = e_lx[-1]
+        else:
+            end = e_lx[-1]
+        ttime_start = ds[block]['trackertime'][start]
+        ttime_end   = ds[block]['trackertime'][end]
+        dur = end-start
+        #create a blink event structure:
+        # blink_code, start (blocktime), end (blocktime), start_trackertime, end_trackertime, duration
+        evnt = ['LX_BLK', start, end, ttime_start, ttime_end, dur]
+        Eblk_lx.append(evnt)
+    #left y
+    for i in range(len(s_ly)):
+        start = s_ly[i]
+        if i < len(e_ly): #check within range of the number of missing periods in data
+            end = e_ly[i]
+        elif i == len(e_ly):
+            end = e_ly[-1]
+        else:
+            end = e_ly[-1]
+        ttime_start = ds[block]['trackertime'][start]
+        ttime_end   = ds[block]['trackertime'][end]
+        dur = end-start
+        #create a blink event structure:
+        # blink_code, start (blocktime), end (blocktime), start_trackertime, end_trackertime, duration
+        evnt = ['LY_BLK', start, end, ttime_start, ttime_end, dur]
+        Eblk_ly.append(evnt)   
+    #right x
+    for i in range(len(s_rx)):
+        start = s_rx[i]
+        if i < len(e_rx): #check within range of the number of missing periods in data
+            end = e_rx[i]
+        elif i == len(e_rx):
+            end = e_rx[-1]
+        else:
+            end = e_rx[-1]
+        ttime_start = ds[block]['trackertime'][start]
+        ttime_end   = ds[block]['trackertime'][end]
+        dur = end-start
+        #create a blink event structure:
+        # blink_code, start (blocktime), end (blocktime), start_trackertime, end_trackertime, duration
+        evnt = ['RX_BLK', start, end, ttime_start, ttime_end, dur]
+        Eblk_rx.append(evnt)    
+    #right y
+    for i in range(len(s_ry)):
+        start = s_ry[i]
+        if i < len(e_ry): #check within range of the number of missing periods in data
+            end = e_ry[i]
+        elif i == len(e_ry):
+            end = e_ry[-1]
+        else:
+            end = e_ry[-1]
+        ttime_start = ds[block]['trackertime'][start]
+        ttime_end   = ds[block]['trackertime'][end]
+        dur = end-start
+        #create a blink event structure:
+        # blink_code, start (blocktime), end (blocktime), start_trackertime, end_trackertime, duration
+        evnt = ['RY_BLK', start, end, ttime_start, ttime_end, dur]
+        Eblk_ry.append(evnt)
+    #append these new structures to the dataset
+    ds[block]['Eblk_lx'] = Eblk_lx
+    ds[block]['Eblk_rx'] = Eblk_rx
+    ds[block]['Eblk_ly'] = Eblk_ly
+    ds[block]['Eblk_ry'] = Eblk_ry
+
 
 
 
 #%%
+#exploring the blinks to highlight issues
 
 blinks = copy.deepcopy(ds[0]['Eblk'])
 blink = [x for x in range(len(blinks)) if len(blinks[x]) > 0]
 blinks = [blinks[x] for x in blink]
 blinks = [x for y in blinks for x in y] #flatten the nested lists into one list
-
-plt.figure()
-#plt.plot(ds[0]['trackertime'], ds[0]['lx'], color = '#252525', label = 'left x' )
-plt.plot(ds[0]['trackertime'], ds[0]['rx'], color = '#08519c' , label = 'right x'); plt.legend()
-for blink in blinks:
-    if blink[1] == 'R':
-        plt.axvline(blink[2], ls = 'dashed', color = '#006d2c') #dark green start
-        #plt.axvline(blink[3], ls = 'dashed', color = '#31a354') #pale green end
-    #elif blink[1] == 'L':
-    #    plt.axvline(blink[2], ls = 'dashed', color = '#e6550d') #dark red/orange start
-        #plt.axvline(blink[3], ls = 'dashed', color = '#fd8d3c') #pale red/orange end        
-
-
-#%%
-#exploring
 
 for i in range(len(blinks)):
     blink_id = i
@@ -138,6 +223,7 @@ then probably plot these and see if better.
 
 to be fair though, credit to them, it's mostly ok'
 """
+
 temp = copy.deepcopy(ds[0]) #create a new, temporary variable for one block of data
 #%%
 
