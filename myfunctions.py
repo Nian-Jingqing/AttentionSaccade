@@ -259,17 +259,32 @@ def interpolateBlinks_Blocked(block, trace):
         
         #now cubic spline interpolate across the larger missing periods (blinks)
         for blink in long_blinks:
-            start, end        = blink[0], blink[1] #get start and end of these missing samples
-    
-            window            = [start-100, start-50, end+50, end+100] #set the window for the interpolation
-            inttime           = np.array(window)
-            inttrace          = np.array([np.nanmedian(signal[start-80:start-40]), np.nanmedian(signal[start-40:start-1]), # by giving the nanmedian between these points, 
-                                          np.nanmedian(signal[end+1:end+40])     , np.nanmedian(signal[end+40:end+80]) ])  # points, it accounts for variance of the signal
-            fx_cub            = sp.interpolate.interp1d(inttime, inttrace, kind = 'cubic')
+            start, end            = blink[0], blink[1] #get start and end of these missing samples
+            if end+40 >= signal.size: #this blink happens just before the end of the block, so need to adjust the window
+                window            = [start-80, start - 40, end, signal.size-1] #reduce the window size but still cubic spline
+            elif end+40 <= signal.size and end+80 >= signal.size:
+                window            = [start-80, start-40, end+40, signal.size-1]
+            else:
+                window            = [start-80, start-40, end+40, end+80] #set the window for the interpolation
+            inttime               = np.array(window)
+            if end + 40 >= signal.size:
+                inttrace          = np.array([np.nanmedian(signal[start-80:start-40])                 , np.nanmedian(signal[start-40:start-1]),
+                                              np.nanmedian(signal[end:int(np.floor((signal.size-1-end)/2))]), np.nanmedian(signal[int(np.ceil((signal.size-1-end)/2)):signal.size-1]) ])
+            elif end+40 <= signal.size and end + 80 >= signal.size:
+                inttrace          = np.array([np.nanmedian(signal[start-80:start-40])                 , np.nanmedian(signal[start-40:start-1]),
+                                              np.nanmedian(signal[end:end+40]), np.nanmedian(signal[end+40:signal.size-1]) ])
+            else:
+                inttrace          = np.array([np.nanmedian(signal[start-80:start-40]), np.nanmedian(signal[start-40:start-1]), # by giving the nanmedian between these points, 
+                                              np.nanmedian(signal[end+1:end+40])     , np.nanmedian(signal[end+40:end+80]) ])  # points, it accounts for variance of the signal
+            fx_cub                = sp.interpolate.interp1d(inttime, inttrace, kind = 'cubic')
             
-            to_interp         = np.arange(start-30, end+30) #interpolate just outside the start of the missing period, for cases of large changes due to blinks
-            interptrace       = fx_cub(to_interp)
-            signal[to_interp] = interptrace    
+            
+            if end+30 >= signal.size:
+                to_interp         = np.arange(start-30, signal.size-1)
+            else:
+                to_interp         = np.arange(start-30, end+30) #interpolate just outside the start of the missing period, for cases of large changes due to blinks
+            interptrace           = fx_cub(to_interp)
+            signal[to_interp]     = interptrace    
     #output the data into the block structure
     block[trace] = signal
     return block
