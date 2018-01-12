@@ -42,7 +42,7 @@ for fid in range(len(list_fnames)):
         #load in the blocked data    
         fname    = list_fnames[fid]
         pickname = fname.split('.')[0] + '_gazeclean.pickle' #remove the previous file ending (.asc), and add new one
-        if not os.path.exists(os.path.join(workingfolder, eyedat, 'blocked_data', pickname)):
+        if not os.path.exists(os.path.join(workingfolder, eyedat, 'gaze_cleaned', pickname)):
             print '\nloading blocked data from pickle'
             with open(os.path.join(eyedat, 'blocked_data', fname), 'rb') as handle:
                 ds = cPickle.load(handle)
@@ -80,7 +80,7 @@ for fid in range(len(list_fnames)):
                 count+=1
             #save the cleaned gaze data to pickle
             print 'saving cleaned blocked data to pickle'    
-            with open(os.path.join(workingfolder, eyedat, 'blocked_data', pickname), 'w') as handle:
+            with open(os.path.join(workingfolder, eyedat, 'gaze_cleaned', pickname), 'w') as handle:
                 cPickle.dump(ds, handle)
             print 'done'
 
