@@ -38,7 +38,7 @@ def parse_eye_data(eye_fname, parse_folder, block_rec, trial_rec, nblocks, ntria
 
 def _parse_eye_data_blockwise():
 
-def _parse_eye_data_trialwise(eye_fname, block_folder,nblocks, ntrials):
+def _parse_eye_data_trialwise(eye_fname, out_folder ,nblocks, ntrials):
     
     """
     eye_fname expects the full path to a file that needs to be parsed.
@@ -48,6 +48,10 @@ def _parse_eye_data_trialwise(eye_fname, block_folder,nblocks, ntrials):
     
     if you give it os.path.join(some_path, 'fname.asc') it will save:
     os.path.join(block_folder, 'fname_parsed.pickle'). These pickle files are read into later preprocessing functions
+    
+    ntrials is the number of trials expected in the data (i.e. the number of times you will have started/stopped the recording)
+    nblocks is needed to divide the trials into blocks as these are seen as 'continuous data' for cleaning
+    
     """
     
     d = open(eye_fname, 'r')
@@ -62,13 +66,13 @@ def _parse_eye_data_trialwise(eye_fname, block_folder,nblocks, ntrials):
     #get all lines where 'START'i s seen, as this marks the start of the recording
     start_inds = [x for x in range(len(split_d)) if len(split_d[x]) == 6 and split_d[x][0] == 'START']
     if len(start_inds) != ntrials:
-        raise ValueError('%d trials are found in the data, not %d as has been input in ntrials' %(len(start_inds),ntrials))
+        raise DataError('%d trials are found in the data, not %d as has been input in ntrials' %(len(start_inds),ntrials))
     
     #get points where recording stopped
     end_inds   = [x for x in range(len(split_d)) if len(split_d[x]) == 7 and split_d[x][0] == 'END']
     
     if len(start_inds) != len(end_inds):
-        raise 
+        raise DataError('the number of times the recording was started and stopped does not align. check problems with acquisition')
     
     #assign some empty lists to get filled with information
     trackertime = []
@@ -89,16 +93,30 @@ def _parse_eye_data_trialwise(eye_fname, block_folder,nblocks, ntrials):
         
         itrl = np.array(split_d[start_line:end_line])
         
-        itrl_event_inds = [x for x in range(len(itrl)) if itrl[x][0] == 'MSG']        # get the line indices where trigs sent
-        itrl_events     = [itrl[x] for x in itrl_event_inds]                              # get the actual triggers
-        itrl_fix_inds   = [x for x in range(len(itrl)) if itrl[x][0] == 'EFIX' or itrl[x][0] == 'SFIX']
-        itrl_fix        = [itrl[x] for x in itrl_fix_inds]
-        itrl_sac_inds   = [x for x in range(len(itrl)) if itrl[x][0] == 'ESACC' or itrl[x][0] == 'SSACC']
-        itrl_sac        = [itrl[x] for x in itrl_sac_inds]
-        itrl_blink_inds = [x for x in range(len(itrl)) if itrl[x][0] == 'EBLINK' or itrl[x][0] == 'SBLINK']
-        itrl_blink      = [itrl[x] for x in itrl_blink_inds]
+        itrl_event_inds, itrl_events     = [], []
+        itrl_blinks_inds, itrl_blink     = [], []
+        itrl_fix_inds, itrl_fix          = [], []
+        itrl_sac_inds, itrl_sac          = [], []
+        itrl_input_inds                  = []
+        for x,y in np.ndenumerate(itrl):
+            if y[0] == 'MSG':
+                itrl_event_inds.append(x[0]) # add line index where a message was sent to the eyetracker
+                itrl_events.append(y)        # add the line itself to list
+            elif y[0] in ['EFIX', 'SFIX']:
+                itrl_fix_inds.append(x[0])   # add line index where fixation detected (SR research)
+                itrl_fix.append(y)           # add fixation event structure to list
+            elif y[0] in ['ESACC', 'SSACC']:
+                itrl_sac_inds.append(x[0])   # add line index where saccade detected (SR research)
+                itrl_sac.append(y)           # add saccade event structure to list
+            elif y[0] in ['EBLINK', 'SBLINK']:
+                itrl_blink_inds.append(x[0]) # add line index where blink detected (SR research)
+                itrl_blink.append(y)         # add blink event structure to list
+            elif y[0] == 'INPUT':
+               itrl_input_inds.append(x[0])  # find where 'INPUT' is in data (sometimes appears, has no use...)
+                
+        #get all non-data line indices
+        itrl_nondata    = sorted(itrl_blink_inds + itrl_sac_inds + itrl_fix_inds + itrl_event_inds + itrl_input_inds)
         
-        itrl_nondata    = sorted(itrl_blink_inds + itrl_sac_inds + itrl_fix_inds + itrl_event_inds) #get all non-data line indices
         itrl_data = np.delete(itrl, itrl_nondata) #remove these lines so all you have is the raw data
 
         itrl_data = itrl_data[6:] #remove first five lines as these are filler after the recording starts        
