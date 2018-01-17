@@ -12,6 +12,16 @@ from scipy import interpolate
 import sys
 import os
 
+
+
+class DataError(Exception):
+    ''' 
+    Raised when there is an error in the datafile and expectations do not align with what is present    
+    '''
+    def _init_(self, msg):
+        self.msg = msg
+
+
 def Eucdist(x1, y1, x2, y2):
     """
     calculate euclidian distance between two points
@@ -23,7 +33,12 @@ def Eucdist(x1, y1, x2, y2):
     return distance
 
 
-def parse_eye_data(eye_fname, block_folder,nblocks, ntrials):
+def parse_eye_data(eye_fname, parse_folder, block_rec, trial_rec, nblocks, ntrials):
+
+
+def _parse_eye_data_blockwise():
+
+def _parse_eye_data_trialwise(eye_fname, block_folder,nblocks, ntrials):
     
     """
     eye_fname expects the full path to a file that needs to be parsed.
@@ -46,8 +61,14 @@ def parse_eye_data(eye_fname, block_folder,nblocks, ntrials):
     
     #get all lines where 'START'i s seen, as this marks the start of the recording
     start_inds = [x for x in range(len(split_d)) if len(split_d[x]) == 6 and split_d[x][0] == 'START']
+    if len(start_inds) != ntrials:
+        raise ValueError('%d trials are found in the data, not %d as has been input in ntrials' %(len(start_inds),ntrials))
+    
     #get points where recording stopped
     end_inds   = [x for x in range(len(split_d)) if len(split_d[x]) == 7 and split_d[x][0] == 'END']
+    
+    if len(start_inds) != len(end_inds):
+        raise 
     
     #assign some empty lists to get filled with information
     trackertime = []
