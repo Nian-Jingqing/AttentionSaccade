@@ -9,6 +9,7 @@ author: Sammi Chekroud
 import numpy   as np
 import scipy   as sp
 from scipy import interpolate
+import copy
 import sys
 import os
 
@@ -20,7 +21,13 @@ class DataError(Exception):
     '''
     def _init_(self, msg):
         self.msg = msg
-
+        
+class ArgumentError(Exception):
+    """
+    Raised when there is an error in the arguments used in a function here    
+    """
+    def _init_(self, msg):
+        self.msg = msg
 
 def Eucdist(x1, y1, x2, y2):
     """
@@ -31,26 +38,224 @@ def Eucdist(x1, y1, x2, y2):
     """
     distance = np.sqrt( (x2-x1)**2 + (y2-y1)**2)
     return distance
+    
+def parse_eye_data(eye_fname, block_rec, trial_rec, nblocks, ntrials = None):
+    """
+    
+    eye_fname    -- full path to a file to be parsed. this is used as a template to create the parsed data in pickle form
+    
+    block_rec    -- boolean as to whether you stopped/started recording blockwise in your task
+    
+    trial_rec    -- boolean as to whethre you stopped/started recording trialwise in your task
+    
+    nblocks      -- the number of blocks of task run in your experiment. This must be defined in all cases.
+
+    ntrials      -- the number of trials in your data if you recorded the eyes with trialwise stop/start
+                    if you recorded blockwise, then ntrials is not needed.
+                    
+                    if you recorded trialwise, then the number of trials per block
+                    is calculated and used to separate the data into defined blocks    
+    """
+    if not os.path.exists(eye_fname): #check that the path to the file exists
+        raise Exception('the filename: %s does not exist. Please check!' %eye_fname)
+    
+    if 'block_rec' not in locals() and 'trial_rec' not in locals():
+        raise ArgumentError('Please indicate whether the recording was stopped/started on each trial or each block')
+    
+    if 'block_rec' in locals():
+        if block_rec == True:
+            trial_rec = False
+    if 'trial_rec' in locals():
+        if trial_rec == True:
+            block_rec = False
+    
+    
+    if 'block_rec' in locals():
+        if block_rec == True and 'nblocks' not in locals():
+            raise ArgumentError('Please specify how many blocks you expect in your data recording')
+        
+    if 'trial_rec' in locals():
+        if trial_rec == True and 'ntrials' not in locals():
+            raise ArgumentError('Please specify how many trials you expect in your data recording')
+        elif trial_rec == True and 'ntrials' in locals() and ntrials == None:
+            raise ArgumentError('Please specify a number of trials to expect')
+        elif trial_rec == True and 'ntrials' in locals() and ntrials != None and 'nblocks' not in locals():
+            raise ArgumentError('Please specify how many blocks of data you recorded')
+
+            
+    if block_rec:
+        d = _parse_eye_data_blockwise(eye_fname, nblocks)
+    else:
+        d = _parse_eye_data_trialwise(eye_fname, nblocks, ntrials)
+
+    return d #return the parsed data
 
 
-def parse_eye_data(eye_fname, parse_folder, block_rec, trial_rec, nblocks, ntrials):
+def _parse_eye_data_blockwise(eye_fname, nblocks):
+    """    
+    this function is called by parse_eye_data and will operate on data where
+    the recording was stopped/started for each block of task data
+    """
+    
+    d = open(eye_fname, 'r')
+    raw_d = d.readlines()
+    d.close()
+    
+    split_d = []
+    for i in range(len(raw_d)):
+        tmp = raw_d[i].split()
+        split_d.append(tmp)
+        
+    start_inds = [x for x in range(len(split_d)) if len(split_d[x]) == 6 and split_d[x][0] == 'START']
+    if len(start_inds) != nblocks:
+        raise DataError('%d blocks are found in the data, not %d as has been input in nblocks' %(len(start_inds),nblocks))
+    
+    #get points where recording stopped
+    end_inds   = [x for x in range(len(split_d)) if len(split_d[x]) == 7 and split_d[x][0] == 'END']
+    
+    if len(start_inds) != len(end_inds):
+        raise DataError('the number of times the recording was started and stopped does not align. check problems with acquisition')    
+        
+    #assign some empty lists to get filled with information
+    trackertime = []
+    lx   = []; rx   = []
+    ly   = []; ry   = []
+    lp   = []; rp   = []
 
+    
+    Efix = []; Sfix = []
+    Esac = []; Ssac = []
+    Eblk = []; Sblk = []
+    Msg  = []
+    
+    for i in range(len(start_inds)):
+        start_line = start_inds[i]
+        end_line   = end_inds[i]
+        
+        iblk = np.array(split_d[start_line:end_line]) #get only lines with info for this block
+        
+        iblk_event_inds, iblk_events     = [], []
+        iblk_blink_inds, iblk_blink      = [], []
+        iblk_fix_inds, iblk_fix          = [], []
+        iblk_sac_inds, iblk_sac          = [], []
+        iblk_input_inds                  = []
+        for x,y in np.ndenumerate(iblk):
+            if y[0] == 'MSG':
+                iblk_event_inds.append(x[0]) # add line index where a message was sent to the eyetracker
+                iblk_events.append(y)        # add the line itself to list
+            elif y[0] in ['EFIX', 'SFIX']:
+                iblk_fix_inds.append(x[0])   # add line index where fixation detected (SR research)
+                iblk_fix.append(y)           # add fixation event structure to list
+            elif y[0] in ['ESACC', 'SSACC']:
+                iblk_sac_inds.append(x[0])   # add line index where saccade detected (SR research)
+                iblk_sac.append(y)           # add saccade event structure to list
+            elif y[0] in ['EBLINK', 'SBLINK']:
+                iblk_blink_inds.append(x[0]) # add line index where blink detected (SR research)
+                iblk_blink.append(y)         # add blink event structure to list
+            elif y[0] == 'INPUT':
+               iblk_input_inds.append(x[0])  # find where 'INPUT' is in data (sometimes appears, has no use...)
+                
+        #get all non-data line indices
+        iblk_nondata    = sorted(iblk_blink_inds + iblk_sac_inds + iblk_fix_inds + iblk_event_inds + iblk_input_inds)
 
-def _parse_eye_data_blockwise():
+        iblk_data = np.delete(iblk, iblk_nondata) #remove these lines so all you have is the raw data
 
-def _parse_eye_data_trialwise(eye_fname, out_folder ,nblocks, ntrials):
+        iblk_data = iblk_data[6:] #remove first five lines as these are filler after the recording starts        
+        
+        try:
+            iblk_data = np.vstack(iblk_data)
+        except ValueError:
+            for item in range(len(iblk_data)):
+                iblk_data[item] = iblk_data[item][:7] #make sure each item has only 7 strings. sometimes the eyetracker hasn't appended the random .... at the end
+            iblk_data = np.vstack(iblk_data) #shape of this should be number of columns in the file (data)
+            
+
+        iblk_data = iblk_data[:,:7]            # only take first 7 columns as these contain data of interest. last one is redundant (if exists)
+        
+        #before you can convert to float, need to replace missing data where its '.' as nans (in pupil this is '0.0')
+        eyecols = [1,2,4,5] #leftx, lefty, rightx, right y col indices
+        for col in eyecols:
+            missing_inds = np.where(iblk_data[:,col] == '.') #find where data is missing in the gaze position, as probably a blink (or its missing as lost the eye)
+            for i in missing_inds:
+                iblk_data[i,col] = np.NaN #replace missing data ('.') with NaN
+                iblk_data[i,3]   = np.NaN #replace left pupil as NaN (as in a blink)
+                iblk_data[i,6]   = np.NaN #replace right pupil as NaN (as in a blink)
+        
+        iblk_data = iblk_data.astype(np.float) # convert data from string to floats for computations
+         
+        #for binocular data, the shape is:
+        # columns: time stamp, left x, left y, left pupil, right x, right y, right pupil
+        iblk_trackertime = iblk_data[:,0]
+        iblk_lx, iblk_ly, iblk_lp = iblk_data[:,1], iblk_data[:,2], iblk_data[:,3]
+        iblk_rx, iblk_ry, iblk_rp = iblk_data[:,4], iblk_data[:,5], iblk_data[:,6]
+        
+        # split Efix/Sfix and Esacc/Ssacc into separate lists
+        iblk_efix = [iblk_fix[x] for x in range(len(iblk_fix)) if
+                     iblk_fix[x][0] == 'EFIX']
+        iblk_sfix = [iblk_fix[x] for x in range(len(iblk_fix)) if
+                     iblk_fix[x][0] == 'SFIX']
+                    
+        iblk_ssac = [iblk_sac[x] for x in range(len(iblk_sac)) if
+                     iblk_sac[x][0] == 'SSACC']
+        iblk_esac = [iblk_sac[x] for x in range(len(iblk_sac)) if
+                     iblk_sac[x][0] == 'ESACC']                      
+        iblk_sblk = [iblk_blink[x] for x in range(len(iblk_blink)) if
+                     iblk_blink[x][0] == 'SBLINK']
+        iblk_eblk = [iblk_blink[x] for x in range(len(iblk_blink)) if
+                     iblk_blink[x][0] == 'EBLINK']
+    
+        #append to the collection of all data now
+        trackertime.append(iblk_trackertime)
+        lx.append(iblk_lx)
+        ly.append(iblk_ly)
+        rx.append(iblk_rx)
+        ry.append(iblk_ry)
+        lp.append(iblk_lp)
+        rp.append(iblk_rp)
+        Efix.append(iblk_efix)
+        Sfix.append(iblk_sfix)
+        Ssac.append(iblk_ssac)
+        Esac.append(iblk_esac)
+        Sblk.append(iblk_sblk)
+        Eblk.append(iblk_eblk)
+        Msg.append(iblk_events)    
+    
+    iblock = {
+    'trackertime': [],
+    'lx'  : [], 'ly'  : [], 'lp'  : [],
+    'rx'  : [], 'ry'  : [], 'rp'  : [],
+    'Efix': [], 'Sfix': [],
+    'Esac': [], 'Ssac': [],
+    'Eblk': [], 'Sblk': [],
+    'Msg' : []
+    }
+    dummy = copy.deepcopy(iblock)
+    blocked_data = np.repeat(dummy, nblocks)
+    
+    for i in np.arange(nblocks):
+        iblock_data = copy.deepcopy(iblock)
+        iblock_data['trackertime'] = trackertime[i]
+        iblock_data['lx'] = lx[i]
+        iblock_data['ly'] = ly[i]
+        iblock_data['lp'] = lp[i]
+        iblock_data['rx'] = rx[i]
+        iblock_data['ry'] = ry[i]
+        iblock_data['rp'] = rp[i]
+        iblock_data['Efix'] = Efix[i]
+        iblock_data['Sfix'] = Sfix[i]
+        iblock_data['Esac'] = Esac[i]
+        iblock_data['Ssac'] = Ssac[i]
+        iblock_data['Eblk'] = Eblk[i]
+        iblock_data['Sblk'] = Sblk[i]
+        iblock_data['Msg'] = Msg[i]
+        blocked_data[i] = iblock_data
+    
+    return blocked_data    
+        
+def _parse_eye_data_trialwise(eye_fname, nblocks, ntrials):
     
     """
-    eye_fname expects the full path to a file that needs to be parsed.
-        The function will take the name of this, minus the file extension, and create a parsed pickle version
-    
-    out_folder needs to be a path to where you want the parsed data to be output to.
-    
-    if you give it os.path.join(some_path, 'fname.asc') it will save:
-    os.path.join(block_folder, 'fname_parsed.pickle'). These pickle files are read into later preprocessing functions
-    
-    ntrials is the number of trials expected in the data (i.e. the number of times you will have started/stopped the recording)
-    nblocks is needed to divide the trials into blocks as these are seen as 'continuous data' for cleaning
+    this function is called by parse_eye_data and will operate on data where the recording was stopped/started for each trial of task data
     
     """
     
@@ -79,8 +284,7 @@ def _parse_eye_data_trialwise(eye_fname, out_folder ,nblocks, ntrials):
     lx   = []; rx   = []
     ly   = []; ry   = []
     lp   = []; rp   = []
-    av_x = []; av_y = []
-    av_p = []
+
     
     Efix = []; Sfix = []
     Esac = []; Ssac = []
@@ -94,7 +298,7 @@ def _parse_eye_data_trialwise(eye_fname, out_folder ,nblocks, ntrials):
         itrl = np.array(split_d[start_line:end_line])
         
         itrl_event_inds, itrl_events     = [], []
-        itrl_blinks_inds, itrl_blink     = [], []
+        itrl_blink_inds, itrl_blink      = [], []
         itrl_fix_inds, itrl_fix          = [], []
         itrl_sac_inds, itrl_sac          = [], []
         itrl_input_inds                  = []
@@ -119,8 +323,16 @@ def _parse_eye_data_trialwise(eye_fname, out_folder ,nblocks, ntrials):
         
         itrl_data = np.delete(itrl, itrl_nondata) #remove these lines so all you have is the raw data
 
-        itrl_data = itrl_data[6:] #remove first five lines as these are filler after the recording starts        
+        itrl_data = itrl_data[6:] #remove first five lines as these are filler after the recording starts    
         
+        try:
+            itrl_data = np.vstack(itrl_data) #if this fails its most likely because the end string of dots is missing for some reason
+        except ValueError: #if fails, fix
+            for item in range(len(itrl_data)):
+                itrl_data[item] = itrl_data[item][:7] #make sure each item has only 7 strings. sometimes the eyetracker hasn't appended the random .... at the end                
+        
+        itrl_data = itrl_data[:,:7]            # only take first 6 columns as these contain data of interest (redundant if above section trips up
+
         itrl_data = np.vstack(itrl_data) #shape of this should be number of columns in the file (data)
         
         #before you can convert to float, need to replace missing data where its '.' as nans (in pupil this is '0.0')
@@ -139,14 +351,6 @@ def _parse_eye_data_trialwise(eye_fname, out_folder ,nblocks, ntrials):
         itrl_lx, itrl_ly, itrl_lp = itrl_data[:,1], itrl_data[:,2], itrl_data[:,3]
         itrl_rx, itrl_ry, itrl_rp = itrl_data[:,4], itrl_data[:,5], itrl_data[:,6]
         
-        #average data across the eyes --- take the nanmean though in case of missing data. we'll still save the independent eyes though as a sanity check
-        itrl_x = np.vstack([itrl_lx, itrl_rx])
-        itrl_x = np.nanmean(itrl_x, axis = 0)
-        itrl_y = np.vstack([itrl_ly, itrl_ry])
-        itrl_y = np.nanmean(itrl_y, axis = 0)    
-        itrl_p = np.vstack([itrl_lp, itrl_rp])
-        itrl_p = np.nanmean(itrl_p, axis = 0)
-    
         # split Efix/Sfix and Esacc/Ssacc into separate lists
         itrl_efix = [itrl_fix[x] for x in range(len(itrl_fix)) if
                      itrl_fix[x][0] == 'EFIX']
@@ -171,9 +375,6 @@ def _parse_eye_data_trialwise(eye_fname, out_folder ,nblocks, ntrials):
         ry.append(itrl_ry)
         lp.append(itrl_lp)
         rp.append(itrl_rp)
-        av_x.append(itrl_x)
-        av_y.append(itrl_y)
-        av_p.append(itrl_p)
         Efix.append(itrl_efix)
         Sfix.append(itrl_sfix)
         Ssac.append(itrl_ssac)
@@ -182,12 +383,12 @@ def _parse_eye_data_trialwise(eye_fname, out_folder ,nblocks, ntrials):
         Eblk.append(itrl_eblk)
         Msg.append(itrl_events)    
     
-    #rep_inds  = np.repeat(np.arange(nblocks),trialsperblock)
+    trialsperblock = ntrials/nblocks
+    rep_inds  = np.repeat(np.arange(nblocks),trialsperblock)
     #plt.hist(rep_inds, bins = nblocks) # all bars should be the same height now if its work? @ trials per block (80)
     
     iblock = {
     'trackertime': [],
-    'av_x': [], 'av_y': [], 'av_p': [],
     'lx'  : [], 'ly'  : [], 'lp'  : [],
     'rx'  : [], 'ry'  : [], 'rp'  : [],
     'Efix': [], 'Sfix': [],
@@ -203,9 +404,6 @@ def _parse_eye_data_trialwise(eye_fname, out_folder ,nblocks, ntrials):
         iblock_data = copy.deepcopy(iblock)
         for ind in inds: #add trialwise info into the blocked structure, continuous data rather than sectioned
             iblock_data['trackertime'].append(trackertime[ind])
-            iblock_data['av_x'].append(av_x[ind])
-            iblock_data['av_y'].append(av_y[ind])
-            iblock_data['av_p'].append(av_p[ind])
             iblock_data['lx'].append(lx[ind])
             iblock_data['ly'].append(ly[ind])
             iblock_data['lp'].append(lp[ind])
@@ -222,9 +420,6 @@ def _parse_eye_data_trialwise(eye_fname, out_folder ,nblocks, ntrials):
             blocked_data[i] = iblock_data
     for block in range(len(blocked_data)): #concatenate trialwise signals into whole block traces to make artefact removal easier
         blocked_data[block]['trackertime'] = np.hstack(blocked_data[block]['trackertime'])
-        blocked_data[block]['av_x']        = np.hstack(blocked_data[block]['av_x']       )
-        blocked_data[block]['av_y']        = np.hstack(blocked_data[block]['av_y']       )
-        blocked_data[block]['av_p']        = np.hstack(blocked_data[block]['av_p']       )
         blocked_data[block]['lx']          = np.hstack(blocked_data[block]['lx']         )
         blocked_data[block]['ly']          = np.hstack(blocked_data[block]['ly']         )
         blocked_data[block]['lp']          = np.hstack(blocked_data[block]['lp']         )
