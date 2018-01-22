@@ -13,28 +13,36 @@ import os
 import copy
 import cPickle
 workingfolder = '/home/sammirc/Experiments/Nick/AttentionSaccade' #workstation directory
+workingfolder = '/Users/user/Desktop/Experiments/Nick/AttentionSaccade' #laptop directory
+
 os.chdir(workingfolder)
 import BCEyes
 
 np.set_printoptions(suppress = True)
 
 eyedir        = os.path.join(workingfolder, 'eyes')
-cleaned_dir   = os.path.join(eyedir, 'gaze_cleaned')
+#cleaned_dir   = os.path.join(eyedir, 'gaze_cleaned')
 
-list_fnames= sorted(os.listdir(cleaned_dir))
+#list_fnames= sorted(os.listdir(cleaned_dir))
 
 #%%
 
 # read in a data file to work on and test epoching with
 
-fname = os.path.join(cleaned_dir, list_fnames[3])
+fname = os.path.join(eyedir, 'blocked_data/AttSacc_S03a_blocked.pickle')
 
 print '\nloading parsed data from pickle'
 with open(os.path.join(fname), 'rb') as handle:
     ds = cPickle.load(handle)
 print 'finished loading data'
 
-with open('')
+ds = BCEyes.find_missing_periods(ds, len(ds))
+
+for block in ds:
+    for trace in ['lx','ly','rx','ry']:
+        block = BCEyes.interpolateBlinks_Blocked(block, trace)
+
+
 
 
 block= copy.deepcopy(ds[0])
@@ -45,9 +53,21 @@ trl_events = copy.deepcopy(events[0])
 
 
 cue_inds = []
+
 for trl in events:
     for x,y in np.ndenumerate(trl):
         for a,b in np.ndenumerate(y):
-            if "_CUE" in b:
-                cue_inds.append(int(y[1]))
+            if '_CUE' in b:
+                cue_inds.append(int(trl[x[0]][1]))
+
+            
+cueinds = []
+for x,y in np.ndenumerate(cue_inds):
+    cueinds.append(int(np.squeeze(np.where(y == block['trackertime']))))
+            
+            
+            
+            
+            
+            
             
