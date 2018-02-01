@@ -52,18 +52,19 @@ events = copy.deepcopy(block['Msg'])
 trl_events = copy.deepcopy(events[0])
 
 
-cue_inds = []
+trig_inds = []
 
 for trl in events:
     for x,y in np.ndenumerate(trl):
         for a,b in np.ndenumerate(y):
             if '_CUE' in b:
-                cue_inds.append(int(trl[x[0]][1]))
+                trig_inds.append(int(trl[x[0]][1]))
 
             
-cueinds = []
-for x,y in np.ndenumerate(cue_inds):
-    cueinds.append(int(np.squeeze(np.where(y == block['trackertime']))))
+# get the time-series indices of when the cue appears (for indexing the traces)
+triginds = []
+for x,y in np.ndenumerate(trig_inds):
+    triginds.append(int(np.squeeze(np.where(y == block['trackertime'])))) 
             
             
             
