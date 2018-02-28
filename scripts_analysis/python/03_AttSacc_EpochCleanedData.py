@@ -11,6 +11,8 @@ Created on Fri Jan 19 16:59:40 2018
 import numpy as np
 import pandas as pd
 import os.path as op
+import matplotlib as mpl
+from matplotlib import pyplot as plt
 import os
 import copy
 import cPickle
@@ -33,7 +35,7 @@ list_fnames = sorted(glob.glob('*.csv')) #list only .csv files for behavioural d
 os.chdir(workingfolder)
 #%%
 
-fid = list_fnames[3]
+fid = list_fnames[6]
 fid_sub = fid.split('.')[0]
 
 beh_fname = op.join(behaviour, fid)
@@ -49,7 +51,11 @@ print 'finished loading data'
 #read in behavioural data
 
 df = pd.read_csv(beh_fname, sep = ',', header = 0)
-nblocks, ntrials, nmeas = 12, 80, 2 #nmeas = number of things to extract from eye data, here just x and y
+
+if fid_sub in ['AttSacc_S01', 'AttSacc_S02']:
+    nblocks, ntrials, nmeas = 24, 80, 2
+else:
+    nblocks, ntrials, nmeas = 12, 80, 2 #nmeas = number of things to extract from eye data, here just x and y
 
 blockid = np.arange(1,nblocks+1)
 blockid = np.repeat(blockid, ntrials)
@@ -57,62 +63,82 @@ df['block'] = blockid
 
 sacctrl_df = df.query('task == 2')
 saccblocks = pd.unique(sacctrl_df.block)
+saccblockinds = np.subtract(saccblocks, 1)
 
-
-timewin = [-200, 800]
+timewin = [-200, 1000]
 times = np.arange(timewin[0], timewin[1])
 baseline     = np.divide([1920,1080], 2) # set x,y coords of where you want to baseline/correct the data to
 
-all_epochs = np.empty([nblocks, ntrials, nmeas, len(times)]) #premake epoched data structure
+#all_epochs = np.zeros([nblocks, ntrials, nmeas, len(times)]) #premake epoched data structure
 trig_to_find = '_ARR' #set string you want to find in the data, can be snippet if long msgs, or whole thing
+sacc_epochs = np.zeros([nblocks*ntrials/2, nmeas, len(times)])
 
+#count = 0
+#itrl  = 0
 
-
-
-count = 0
-itrl  = 0
-for block in ds:
-    if count+1 in saccblocks:
-        events = copy.deepcopy(block['Msg'])
-        evs    = np.array([i for event in events for i in event]) #flatten list of lists into list
+for i in saccblockinds:
+    block = ds[i]
+    events = copy.deepcopy(block['Msg'])
+    evs    = np.array([i for event in events for i in event]) #flatten list of lists into list
+    
+    #remove uninformative messages (i.e. that get sent just after start of recording)
+    uninf_inds = []
+    for x,y in np.ndenumerate(evs):
+        if y[2] == '!MODE':
+            uninf_inds.append(x[0])
+    evs = np.delete(evs, uninf_inds) #remove them. this now contains only task triggers
+    
+    #find triggers that you want
+    trig_inds    = []
+    for x,y in np.ndenumerate(evs):
+        if trig_to_find in y[2]:
+            trig_inds.append(x[0])
+    #create mask to select only trigger of interest
+    mask = np.zeros(len(evs), dtype = bool)
+    mask[trig_inds] = True
+    trigsoi = evs[mask] #get only triggers of interest
+    
+    #get trackertime start times for the trigger of interest
+    epoch_starts = []
+    for x,y in np.ndenumerate(trigsoi):
+        epoch_starts.append(int(y[1]))
+    
+    
+    starts = []
+    for x,y in np.ndenumerate(epoch_starts):
+        ind = int(np.where(block['trackertime'] == y)[0])
+        starts.append(ind)
         
-        #remove uninformative messages (i.e. that get sent just after start of recording)
-        uninf_inds = []
-        for x,y in np.ndenumerate(evs):
-            if y[2] == '!MODE':
-                uninf_inds.append(x[0])
-        evs = np.delete(evs, uninf_inds) #remove them. this now contains only task triggers
-        
-        #find triggers that you want
-        trig_inds    = []
-        for x,y in np.ndenumerate(evs):
-            if trig_to_find in y[2]:
-                trig_inds.append(x[0])
-        #create mask to select only trigger of interest
-        mask = np.zeros(len(evs), dtype = bool)
-        mask[trig_inds] = True
-        trigsoi = evs[mask] #get only triggers of interest
-        
-        #get trackertime start times for the trigger of interest
-        epoch_starts = []
-        for x,y in np.ndenumerate(trigsoi):
-            epoch_starts.append(int(y[1]))
-        
-        
-        starts = []
-        for x,y in np.ndenumerate(epoch_starts):
-            ind = int(np.where(block['trackertime'] == y)[0])
-            starts.append(ind)
-            
-        times        = np.arange(timewin[0], timewin[1])
-        for x,y in np.ndenumerate(starts):
-            
+    times        = np.arange(timewin[0], timewin[1])
+    trl_epochs   = np.zeros([ntrials, nmeas, len(times)])
+    for x,y in np.ndenumerate(starts):
+        try:
             epstart = y + timewin[0]
-            epend   = y + timewin[1] #+1 to account for clipping at end of indexing
+            epend   = y + timewin[1] 
             ep_lx   = block['lx'][epstart:epend]
             ep_ly   = block['ly'][epstart:epend] 
             ep_rx   = block['rx'][epstart:epend] 
             ep_ry   = block['ry'][epstart:epend]
+            if len(ep_lx) < len(times): #too few samples, pad array with nans to the end of the time window
+                #create empty vectors
+                tmp_lx = np.full(len(times), np.NaN)
+                tmp_ly = np.full(len(times), np.NaN)
+                tmp_rx = np.full(len(times), np.NaN)
+                tmp_ry = np.full(len(times), np.NaN)
+                
+                #fill first section with the data
+                tmp_lx[:ep_lx.shape[0]] = ep_lx
+                tmp_ly[:ep_lx.shape[0]] = ep_ly
+                tmp_rx[:ep_lx.shape[0]] = ep_rx
+                tmp_ry[:ep_lx.shape[0]] = ep_ry
+                
+                #now replace back into original structs
+                ep_lx = tmp_lx
+                ep_ly = tmp_ly
+                ep_rx = tmp_rx
+                ep_ry = tmp_ry
+                
+                
             #median baseline the data before averaging across eyes
             
             #get 100ms pre trigger median value
@@ -130,29 +156,43 @@ for block in ds:
             #average across eyes
             av_x = np.nanmean([ep_lx.T, ep_rx.T], axis = 0)
             av_y = np.nanmean([ep_ly.T, ep_ry.T], axis = 0)
-            #store average of the two eyes
-            all_epochs[count,x, 0, :] = av_x
-            all_epochs[count,x, 1, :] = av_y
-        count += 1
-    else:
-        continue
             
+            trl_epochs[x[0], 0, :] = av_x
+            trl_epochs[x[0], 1, :] = av_y
+        except ValueError:
+                print x[0]
+#            #store average of the two eyes
+#            all_epochs[count,x, 0, :] = av_x
+#            all_epochs[count,x, 1, :] = av_y
+#            sacc_epochs[itrl, 0, :]   = av_x
+#            sacc_epochs[itrl, 1, :]   = av_y
+#        count += 1
+#        itrl +=1
+#    else:
+#        continue
+    plt.figure()
+    plt.axvline(0, ls = '--', color = '#636363')
+    for i in range(trl_epochs.shape[0]):
+        plt.plot(times, trl_epochs[i,0,:])            
 
-saccblock_inds = np.subtract(saccblocks, 1)
-sacc_epochs = all_epochs[saccblock_inds, :, :, :]
-sacc_epochs.shape #just print the shape of it to see how many blocks are in it
+#%%
+
+#make block invariant
+epochs_trls = np.vstack(all_epochs)
 
 
+sacctrl_inds = [x for x in range(len(df)) if df.task[x] == 2]#
 
-#plot a test
-from matplotlib import pyplot as plt
+sacctrls = epochs_trls[sacctrl_inds]
 
-tmp = np.squeeze(sacc_epochs[0,:,:,:]) #take first saccade block
+#plot test
+#tmp = np.squeeze(all_epochs[6,:,:,:]) #take first saccade block
+#for x in range(sacctrls.shape[0]): #loop over all trials
 
 plt.figure()
-for x in range(tmp.shape[0]): #loop over all trials
-    plt.plot(times,tmp[x,0,:])
 plt.axvline(0, ls = '--', color = '#636363')    
+for x in range(960):
+    plt.plot(times,sacc_epochs[x,0,:])
 
 
 tmp_avx = np.nanmean(np.squeeze(tmp[:,0,:]), axis = 0)
