@@ -6,8 +6,6 @@ Created on Fri Jan 19 16:59:40 2018
 @author: sammirc
 """
 
-
-
 import numpy as np
 import pandas as pd
 import os.path as op
@@ -65,19 +63,20 @@ sacctrl_df = df.query('task == 2')
 saccblocks = pd.unique(sacctrl_df.block)
 saccblockinds = np.subtract(saccblocks, 1)
 
-timewin = [-200, 1000]
+timewin = [-300, 1000]
 times = np.arange(timewin[0], timewin[1])
 baseline     = np.divide([1920,1080], 2) # set x,y coords of where you want to baseline/correct the data to
+baselinewindow = [int(np.where(times==0)[0]), int(np.where(times==0)[0])-150]
 
 #all_epochs = np.zeros([nblocks, ntrials, nmeas, len(times)]) #premake epoched data structure
 trig_to_find = '_ARR' #set string you want to find in the data, can be snippet if long msgs, or whole thing
 sacc_epochs = np.zeros([nblocks*ntrials/2, nmeas, len(times)])
 
-#count = 0
-#itrl  = 0
-
-for i in saccblockinds:
-    block = ds[i]
+saccblock_epochs = np.zeros([len(saccblockinds), ntrials, nmeas, len(times)])
+#%%
+for i in range(len(saccblockinds)):
+    blockind = i
+    block = ds[saccblockinds[i]]
     events = copy.deepcopy(block['Msg'])
     evs    = np.array([i for event in events for i in event]) #flatten list of lists into list
     
@@ -142,10 +141,10 @@ for i in saccblockinds:
             #median baseline the data before averaging across eyes
             
             #get 100ms pre trigger median value
-            lx_bl = np.nanmedian(ep_lx[100:201])
-            ly_bl = np.nanmedian(ep_ly[100:201])
-            rx_bl = np.nanmedian(ep_rx[100:201])
-            ry_bl = np.nanmedian(ep_ry[100:201])
+            lx_bl = np.nanmedian(ep_lx[baselinewindow[1]:baselinewindow[0]])
+            ly_bl = np.nanmedian(ep_ly[baselinewindow[1]:baselinewindow[0]])
+            rx_bl = np.nanmedian(ep_rx[baselinewindow[1]:baselinewindow[0]])
+            ry_bl = np.nanmedian(ep_ry[baselinewindow[1]:baselinewindow[0]])
             
             #baseline epochs
             ep_lx = np.add(np.subtract(ep_lx, lx_bl),baseline[0])
@@ -159,21 +158,33 @@ for i in saccblockinds:
             
             trl_epochs[x[0], 0, :] = av_x
             trl_epochs[x[0], 1, :] = av_y
+            saccblock_epochs[blockind, x, 0, :] = av_x
+            saccblock_epochs[blockind, x, 1, :] = av_y
         except ValueError:
                 print x[0]
-#            #store average of the two eyes
-#            all_epochs[count,x, 0, :] = av_x
-#            all_epochs[count,x, 1, :] = av_y
-#            sacc_epochs[itrl, 0, :]   = av_x
-#            sacc_epochs[itrl, 1, :]   = av_y
-#        count += 1
-#        itrl +=1
-#    else:
-#        continue
+#%%
+#saccblock_epochs contains x and y data for all saccade blocks, and all trials within that
+#epoched relative to the appearance of target '_ARR' trigger
+
+#check if epoch directories exist. if not, make them.
+epcue_dir  = op.join(workingfolder, 'eyes','epoched_cue')
+eptarg_dir = op.join(workingfolder, 'eyes','epoched_target')
+
+if not op.exists(epcue_dir):
+    os.mkdir(epcue_dir)
+if not op.exists(eptarg_dir):
+    os.mkdir(eptarg_dir)
+
+
+#%%
+tmp = copy.deepcopy(saccblock_epochs[0])
+tmpx = np.vstack(np.squeeze(tmp[:,0,:]))
+
+for i in range(tmpx.shape[0]):
     plt.figure()
     plt.axvline(0, ls = '--', color = '#636363')
-    for i in range(trl_epochs.shape[0]):
-        plt.plot(times, trl_epochs[i,0,:])            
+    plt.plot(times, tmpx[i,:])
+    plt.axhline(baseline[0], ls = '--', color = '#636363')     
 
 #%%
 
