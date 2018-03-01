@@ -165,6 +165,14 @@ for i in range(len(sacc_ds)):
         for y in range(trlavg.shape[1]):
             trldistfromfix[y] = BCEyes.Eucdist(baseline[0], baseline[1], trlavg[0,y], trlavg[1,y])
         over_thresh = np.where(trldistfromfix > ppd)[0]
+        if over_thresh.size == 0:
+            usable[x] = 1
+        else:
+            usable[x] = 0
+        if over_thresh.size>0: #comment this out if you don't want to look at why a trial was excluded
+            plt.figure()
+            plt.plot(trlepochtimes, trldistfromfix, color = '#e41a1c')
+            plt.axhline(ppd, ls = '--', color = '#636363')
         
 
 
@@ -172,9 +180,6 @@ for i in range(len(sacc_ds)):
 
 # median filters can be found:
 # sp.ndimage.filters.median_filter(array, size = [insert size of the window you want to use for filter])
-
-
-
 
 
 
