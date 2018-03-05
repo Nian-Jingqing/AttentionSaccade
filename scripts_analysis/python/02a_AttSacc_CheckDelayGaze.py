@@ -14,7 +14,6 @@ from matplotlib import pyplot as plt
 import os
 import copy
 import cPickle
-import BCEyes
 import glob
 np.set_printoptions(suppress = True)
 %matplotlib
@@ -22,6 +21,7 @@ np.set_printoptions(suppress = True)
 
 workingfolder = '/home/sammirc/Experiments/Nick/AttentionSaccade' #workstation directory
 os.chdir(workingfolder)
+import BCEyes #need to import here as found in this dir
 
 
 behaviour     = op.join(workingfolder, 'behaviour', 'csv')
@@ -80,16 +80,21 @@ sacctrl_df    = df.query('task == 2')
 saccblocks    = pd.unique(sacctrl_df.block)
 saccblockinds = np.subtract(saccblocks, 1)
 
+att_df        = df.query('task == 1')
+attblocks     = pd.unique(att_df.block)
+attblockinds  = np.subtract(attblocks,1)
+
 #pull out only the saccade blocks of the task
 
 sacc_ds       = copy.deepcopy(ds[saccblockinds])
+att_ds        = copy.deepcopy(ds[attblockinds])  
 
 #%% loop over saccade blocks and check that gaze is within 2 degrees of fixation during delay
 ppd             = 72 #pixels per degree
 gazethresh      = ppd * 2
 baseline        = np.divide([1920,1080], 2) # coords for the centre of the screen
 baselinerange   = 100 #100ms prior to trigger of interest
-
+all_usable      = np.zeros([len(saccblockinds),ntrials])
 for i in range(len(sacc_ds)):
     blockind     = i
     blocknum     = saccblocks[i]
@@ -169,15 +174,126 @@ for i in range(len(sacc_ds)):
             usable[x] = 1
         else:
             usable[x] = 0
+#        if over_thresh.size>0: #comment this out if you don't want to look at why a trial was excluded
+#            plt.figure()
+#            plt.plot(trlepochtimes, trldistfromfix, color = '#e41a1c')
+#            plt.axhline(ppd, ls = '--', color = '#636363')
+    all_usable[blockind,:] = usable
+
+all_usable = np.array([i for use in all_usable for i in use], dtype=int) #flatten
+
+sacctrl_df['CT_fixed'] = all_usable
+
+#%%
+ppd             = 72 #pixels per degree
+gazethresh      = ppd * 2
+baseline        = np.divide([1920,1080], 2) # coords for the centre of the screen
+baselinerange   = 100 #100ms prior to trigger of interest
+att_usable      = np.zeros([len(attblockinds),ntrials])
+for i in range(len(att_ds)):
+    blockind     = i
+    blocknum     = attblocks[i]
+    block        = att_ds[i]
+    
+    events       = copy.deepcopy(block['Msg'])
+    events       = np.array([x for event in events for x in event])
+    cuetrig      = '_CUE'
+    targtrig     = '_ARR'
+    
+    cuetriginds  = []
+    targtriginds = []
+    
+    for x,y in np.ndenumerate(events):
+        if cuetrig in y[2]:
+            cuetriginds.append(x[0])
+        elif targtrig in y[2]:
+            targtriginds.append(x[0])
+    
+    #get just relevant triggers
+    cuetrigs  = events[cuetriginds]
+    targtrigs = events[targtriginds]
+    
+    #find start and end points of the interval for each trial (trackertime)
+    starts_tt = []
+    ends_tt   = []
+    for x,y in np.ndenumerate(cuetrigs):
+        starts_tt.append(int(y[1]))
+    for x,y in np.ndenumerate(targtrigs):
+        ends_tt.append(int(y[1]))
+        
+    #get starts in sample time not trackertime
+    starts, ends = [], []
+    for x,y in np.ndenumerate(starts_tt):
+        ind = int(np.where(block['trackertime']==y)[0])
+        starts.append(ind)
+    for x,y in np.ndenumerate(ends_tt):
+        ind = int(np.where(block['trackertime']==y)[0])
+        ends.append(ind)
+    
+    usable = np.zeros([ntrials], dtype = int) #premake list of usable trials indices for block
+    for x in range(len(starts)):
+        start = starts[x] - 200
+        end   = ends[x]
+
+        trlepoch      = np.empty([ 4, len(np.arange(start,end)) ]) #lx, ly, rx, ry for epoch in the same array
+        trlepochtimes = np.subtract(range(len(np.arange(start,end))),200) #timepoints within epoch
+        
+        #get the data wanted
+        trlepoch[0,:] = block['lx'][start:end]
+        trlepoch[1,:] = block['ly'][start:end]
+        trlepoch[2,:] = block['rx'][start:end]
+        trlepoch[3,:] = block['ry'][start:end]
+        
+        #baseline prior to averaging across the eyes (should make the average eye more reliable)
+        baselinewindow = [ int(np.where(trlepochtimes==0)[0]), int(np.where(trlepochtimes==0)[0]) - baselinerange]
+        lx_bl = np.nanmedian(trlepoch[0,:][baselinewindow[1]:baselinewindow[0]])
+        ly_bl = np.nanmedian(trlepoch[1,:][baselinewindow[1]:baselinewindow[0]])
+        rx_bl = np.nanmedian(trlepoch[2,:][baselinewindow[1]:baselinewindow[0]])
+        ry_bl = np.nanmedian(trlepoch[3,:][baselinewindow[1]:baselinewindow[0]])
+        
+        trlepoch[0,:] = np.add(np.subtract(trlepoch[0,:], lx_bl),baseline[0])
+        trlepoch[1,:] = np.add(np.subtract(trlepoch[1,:], ly_bl),baseline[1])
+        trlepoch[2,:] = np.add(np.subtract(trlepoch[2,:], rx_bl),baseline[0])
+        trlepoch[3,:] = np.add(np.subtract(trlepoch[3,:], ry_bl),baseline[1])
+        
+        trlavg = np.empty([2, len(np.arange(start,end))])
+        trlavg[0,:] = np.nanmean(trlepoch[[0,2], :], axis = 0)
+        trlavg[1,:] = np.nanmean(trlepoch[[1,3], :], axis = 0)
+        
+        #calculate distance of gaze from fixation
+        trldistfromfix = np.empty([len(np.arange(start,end))])
+        for y in range(trlavg.shape[1]):
+            trldistfromfix[y] = BCEyes.Eucdist(baseline[0], baseline[1], trlavg[0,y], trlavg[1,y])
+        over_thresh = np.where(trldistfromfix > ppd)[0]
+        if over_thresh.size == 0:
+            usable[x] = 1
+        else:
+            usable[x] = 0
         if over_thresh.size>0: #comment this out if you don't want to look at why a trial was excluded
             plt.figure()
             plt.plot(trlepochtimes, trldistfromfix, color = '#e41a1c')
             plt.axhline(ppd, ls = '--', color = '#636363')
-        
+    att_usable[blockind,:] = usable
 
+att_usable = np.array([i for use in att_usable for i in use], dtype=int) #flatten
+
+att_df['CT_fixed'] = att_usable
+#%%
+#combine data frames
+alldata = pd.concat([att_df, sacctrl_df], axis = 0).sort_values(by='trial')
+
+#reorder columns for ease of viewing/later analysis
+alldata.columns.tolist()
+alldata = alldata.reindex_axis(['subject', 'session', 'block', 'trial', 'task' ,'CT_fixed','cuecol', 'cueloc', 'validity', 'targloc', 'targtilt', 'delay', 'resp', 'time', 'corr'], axis=1)
+
+if not op.exists(op.join(behaviour, 'gazechecked')):
+    os.mkdir(op.join(behaviour, 'gazechecked'))
+    
+new_fname = op.join(behaviour, 'gazechecked', fid_sub+'_gazechecked.csv')
+
+alldata.to_csv(new_fname, sep=',', na_rep = np.nan, index = False)
 
 #%%
-
 # median filters can be found:
 # sp.ndimage.filters.median_filter(array, size = [insert size of the window you want to use for filter])
 
