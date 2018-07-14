@@ -436,7 +436,7 @@ def _parse_eye_data_trialwise(eye_fname, nblocks, ntrials):
 
 
 
-def find_missing_periods(data, nblocks):
+def find_missing_periods(data, nblocks, traces_to_scan):
     '''
     this function will find all sections of missing data. this typically relates to blinks
     but it will also find small patches where an eye has been dropped from the data.
@@ -449,6 +449,16 @@ def find_missing_periods(data, nblocks):
     these correspond to the left and right gaze values. this function will iterate over each one to identify missing periods
     in each signal, and then output this information into new keys in your data:
     Eblk_lx, Eblk_ly, Eblk_rx, Eblk_ry
+    
+    
+    traces_to_scan -- a list of the traces that you actually want to scan for blinks is needed here
+                      this allows some flexibility in what you scan (e.g. if not at all interested in gaze, you can just find missing periods for the pupil data)
+    
+    
+    example:
+        data = find_missing_periods(data, nblocks = 1, traces_to_scan = ['lp', 'rp', 'lx', 'rx', 'ly', 'ry'])
+        
+        
     '''
     
     if not isinstance(data, np.ndarray):
@@ -459,130 +469,65 @@ def find_missing_periods(data, nblocks):
         
     
     for block in data: #iterate over each block of data
-        if 'lx' not in block.keys():
-            raise Exception('A signal relating to the left eye is missing. Make sure the left x is labelled \'lx\'')
-        if 'ly' not in block.keys():
-            raise Exception('A signal relating to the left eye is missing. Make sure the left y is labelled \'ly\'')
-        if 'rx' not in block.keys():
-            raise Exception('A signal relating to the right eye is missing. Make sure the right x is labelled \'rx\'')
-        if 'ry' not in block.keys():
-            raise Exception('A signal relating to the right eye is missing. Make sure the right y is labelled \'ry\'')
+        
+        for trace in traces_to_scan:
+            if trace not in block.keys():
+                raise Exception('the signal %s is missing from your data. check spelling, or check the traces you want to pass to the function!' %trace)
+#        
+#        if 'lx' not in block.keys():
+#            raise Exception('A signal relating to the left eye is missing. Make sure the left x is labelled \'lx\'')
+#        if 'ly' not in block.keys():
+#            raise Exception('A signal relating to the left eye is missing. Make sure the left y is labelled \'ly\'')
+#        if 'rx' not in block.keys():
+#            raise Exception('A signal relating to the right eye is missing. Make sure the right x is labelled \'rx\'')
+#        if 'ry' not in block.keys():
+#            raise Exception('A signal relating to the right eye is missing. Make sure the right y is labelled \'ry\'')
+#        if 'lp' not in block.keys():
+#            raise Exception('The signal relating to the left pupil size is missing. Make sure that the left pupil is labelled \'lp\'')
+#        if 'rp' not in block.keys():
+#            raise Exception('The signal relating to the right pupil size is missing. Make sure that the right pupil is labelled \'rp\'')
+        
+        #create empty vectors to hold start and end points of missing data in the traces specified in function call            
+        for trace in traces_to_scan:
+            vars()['s_' + trace] = []
+            vars()['e_' + trace] = []
+
+        #find the missing data in each gaze trace
+        for trace in traces_to_scan:
+            tmp_mtrace = np.array(np.isnan(block[trace]) == True, dtype = int) #array's of 1/0's if data is missing at a sample
+            tmp_dtrace = np.diff(tmp_mtrace) #find the change-points. +1 means goes from present to absent, -1 from absent to present
+            vars()['s_' + trace] = np.squeeze(np.where(tmp_dtrace ==  1)) #find where it starts to be missing
+            vars()['e_' + trace] = np.squeeze(np.where(tmp_dtrace == -1)) #find the index of the last missing sample
             
-        s_lx = []; s_rx = [];
-        s_ly = []; s_ry = [];
-        e_lx = []; e_rx = [];
-        e_ly = []; e_ry = [];
 
-        #find missing data in each gaze trace (left x & y, right x & y) separately for precision
-        mlx = np.array(np.isnan(block['lx']) == True, dtype = int) # array of 1's and 0's for if data is missing at that time point
-        dlx = np.diff(mlx) #find change-points, +1 means goes from present to absent, -1 from absent to present
-        s_lx = np.squeeze(np.where(dlx ==  1)) #find points where it starts to be missing
-        e_lx = np.squeeze(np.where(dlx == -1))+1 #find points where it stops being missing
+        for trace in traces_to_scan:
+            vars()['Eblk_' + trace] = []
         
-        mly = np.array(np.isnan(block['ly']) == True, dtype = int)
-        dly = np.diff(mly)
-        s_ly = np.squeeze(np.where(dly ==  1))
-        e_ly = np.squeeze(np.where(dly == -1))+1
-        
-        mrx = np.array(np.isnan(block['rx']) == True, dtype = int)
-        drx = np.diff(mrx)
-        s_rx = np.squeeze(np.where(drx ==  1))
-        e_rx = np.squeeze(np.where(drx == -1))+1
-        
-        mry = np.array(np.isnan(block['ry']) == True, dtype = int)
-        dry = np.diff(mry)
-        s_ry = np.squeeze(np.where(dry ==  1))
-        e_ry = np.squeeze(np.where(dry == -1))+1
-    
-        Eblk_lx = []; Eblk_ly = []
-        Eblk_rx = []; Eblk_ry = []
-        #left x
-        for i in range(s_lx.size):
-            if s_lx.size == 1:
-                start = s_lx.tolist()
-                end   = e_lx.tolist()
-            else:
-                start = s_lx[i]
-                if i < e_lx.size: #check within range of the number of missing periods in data
-                    end = e_lx[i]
-                elif i == e_lx.size:
-                    end = e_lx[-1]
+        for trace in traces_to_scan:               # loop over all traces
+            for i in range(len(vars()['s_' + trace])):  # loop over every start of missing data
+                if vars()['s_' + trace].size == 1: # if only one missing period (unlikely in blocked data, but common if you get trialwise recordings)
+                    start = vars()['s_' + trace].tolist()
+                    end   = vars()['e_' + trace].tolist()
                 else:
-                    end = e_lx[-1]
-            ttime_start = block['trackertime'][start]
-            ttime_end   = block['trackertime'][end]
-            dur = end-start
-                #create a blink event structure:
-                # blink_code, start (blocktime), end (blocktime), start_trackertime, end_trackertime, duration
-            evnt = ['LX_BLK', start, end, ttime_start, ttime_end, dur]
-            Eblk_lx.append(evnt)
-        #left y
-        for i in range(s_ly.size):
-            if s_ly.size == 1:
-                start = s_ly.tolist()
-                end   = e_ly.tolist()
-            else:
-                start = s_ly[i]
-                if i < e_ly.size: #check within range of the number of missing periods in data
-                    end = e_ly[i]
-                elif i == e_ly.size:
-                    end = e_ly[-1]
-                else:
-                    end = e_ly[-1]
-            ttime_start = block['trackertime'][start]
-            ttime_end   = block['trackertime'][end]
-            dur = end-start
-            #create a blink event structure:
-            # blink_code, start (blocktime), end (blocktime), start_trackertime, end_trackertime, duration
-            evnt = ['LY_BLK', start, end, ttime_start, ttime_end, dur]
-            Eblk_ly.append(evnt)   
-        #right x
-        for i in range(s_rx.size):
-            if s_rx.size == 1:
-                start = s_rx.tolist()
-                end   = e_rx.tolist()
-            else:
-                start = s_rx[i]
-                if i < e_rx.size: #check within range of the number of missing periods in data
-                    end = e_rx[i]
-                elif i == e_rx.size:
-                    end = e_rx[-1]
-                else:
-                    end = e_rx[-1]
-            ttime_start = block['trackertime'][start]
-            ttime_end   = block['trackertime'][end]
-            dur = end-start
-            #create a blink event structure:
-            # blink_code, start (blocktime), end (blocktime), start_trackertime, end_trackertime, duration
-            evnt = ['RX_BLK', start, end, ttime_start, ttime_end, dur]
-            Eblk_rx.append(evnt)    
-        #right y
-        for i in range(s_ry.size):
-            if s_ry.size == 1:
-                start = s_ry.tolist()
-                end   = e_ry.tolist()
-
-            else:
-                start = s_ry[i]
-                if i < e_ry.size: #check within range of the number of missing periods in data
-                    end = e_ry[i]
-                elif i == e_ry.size:
-                    end = e_ry[-1]
-                else:
-                    end = e_ry[-1]
-            ttime_start = block['trackertime'][start]
-            ttime_end   = block['trackertime'][end]
-            dur = end-start
-            #create a blink event structure:
-            # blink_code, start (blocktime), end (blocktime), start_trackertime, end_trackertime, duration
-            evnt = ['RY_BLK', start, end, ttime_start, ttime_end, dur]
-            Eblk_ry.append(evnt)
-        #append these new structures to the dataset
-        block['Eblk_lx'] = Eblk_lx
-        block['Eblk_rx'] = Eblk_rx
-        block['Eblk_ly'] = Eblk_ly
-        block['Eblk_ry'] = Eblk_ry
-        
+                    start   = vars()['s_' + trace][i]
+                    if i    < vars()['e_' + trace].size: #check within the range of missing periods in the data
+                        end = vars()['e_' + trace][i]
+                    elif i == vars()['e_' + trace].size:
+                        end = vars()['e_' + trace][-1]
+                    else:
+                        end = vars()['e_' + trace][-1] #get the last end point
+                ttime_start = block['trackertime'][start]
+                ttime_end   = block['trackertime'][end]
+                dur = end-start
+                
+                # now we'll make a blink event structure
+                # blink_code, start (blocktime), end (blocktime), start (trackertime), end (trackertime), duration
+                evnt = [trace + 'BLK', start, end, ttime_start, ttime_end, dur]
+                vars()['Eblk_' + trace].append(evnt)
+                
+        #append these new structures to the dataset...
+        for trace in traces_to_scan:
+            block['Eblk_' + trace] = vars()['Eblk_' + trace]
     return data
 
 def interpolateBlinks_Blocked(block, trace):
@@ -678,7 +623,7 @@ def interpolateBlinks_Blocked(block, trace):
             elif end+40 <= signal.size and end+80 >= signal.size:
                 window            = [start-100, start-50, end+50, signal.size-1]
             else:
-                window            = [start-100, start-50, end+50, end+100 #set the window for the interpolation
+                window            = [start-100, start-50, end+50, end+100] #set the window for the interpolation
             inttime               = np.array(window)
             if end + 50 >= signal.size:
                 inttrace          = np.array([np.nanmedian(signal[start-100:start-50])                 , np.nanmedian(signal[start-50:start-1]),
