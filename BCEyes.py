@@ -44,7 +44,7 @@ def Eucdist(x1, y1, x2, y2):
     distance = np.sqrt( (x2-x1)**2 + (y2-y1)**2)
     return distance
 
-def parse_eye_data(eye_fname, block_rec, trial_rec, nblocks, ntrials = None):
+def parse_eye_data(eye_fname, block_rec, trial_rec, nblocks, ntrials = None, binocular = True):
     """
 
     eye_fname    -- full path to a file to be parsed. this is used as a template to create the parsed data in pickle form
@@ -60,6 +60,7 @@ def parse_eye_data(eye_fname, block_rec, trial_rec, nblocks, ntrials = None):
 
                     if you recorded trialwise, then the number of trials per block
                     is calculated and used to separate the data into defined blocks
+    binocular    -- this is a boolean specifying if you made a binocular recording (True if yes, False if monocular)
     """
     if not os.path.exists(eye_fname): #check that the path to the file exists
         raise Exception('the filename: %s does not exist. Please check!' %eye_fname)
@@ -89,14 +90,14 @@ def parse_eye_data(eye_fname, block_rec, trial_rec, nblocks, ntrials = None):
 
 
     if block_rec:
-        d = _parse_eye_data_blockwise(eye_fname, nblocks)
+        d = _parse_eye_data_blockwise(eye_fname, nblocks, binocular)
     else:
-        d = _parse_eye_data_trialwise(eye_fname, nblocks, ntrials)
+        d = _parse_eye_data_trialwise(eye_fname, nblocks, ntrials, binocular)
 
     return d #return the parsed data
 
 
-def _parse_eye_data_blockwise(eye_fname, nblocks):
+def _parse_eye_data_blockwise(eye_fname, nblocks, binocular):
     """
     this function is called by parse_eye_data and will operate on data where
     the recording was stopped/started for each block of task data
@@ -122,16 +123,22 @@ def _parse_eye_data_blockwise(eye_fname, nblocks):
         raise DataError('the number of times the recording was started and stopped does not align. check problems with acquisition')
 
     #assign some empty lists to get filled with information
-    trackertime = []
-    lx   = []; rx   = []
-    ly   = []; ry   = []
-    lp   = []; rp   = []
-
-
-    Efix = []; Sfix = []
-    Esac = []; Ssac = []
-    Eblk = []; Sblk = []
-    Msg  = []
+    if binocular == True:
+        traces = ['lx', 'rx', 'ly', 'ry', 'lp', 'rp']
+    elif binocular == False:
+        traces = ['x', 'y', 'p']
+    
+    #trackertime = np.array([])
+    
+    tmpdata = dict() #this will house the arrays that we fill with information
+    tmpdata['trackertime'] = np.array([])
+    for trace in traces:
+        tmpdata[trace] = np.array([])
+        
+    tmpdata['Efix'] = np.array([]); tmpdata['Sfix'] = np.array([])
+    tmpdata['Esac'] = np.array([]); tmpdata['Ssac'] = np.array([])
+    tmpdata['Eblk'] = np.array([]); tmpdata['Sblk'] = np.array([])
+    tmpdata['Msg']  = np.array([])
 
     for i in range(len(start_inds)):
         start_line = start_inds[i]
@@ -159,7 +166,17 @@ def _parse_eye_data_blockwise(eye_fname, nblocks):
                 iblk_blink.append(y)         # add blink event structure to list
             elif y[0] == 'INPUT':
                iblk_input_inds.append(x[0])  # find where 'INPUT' is in data (sometimes appears, has no use...)
-
+               
+        #the block events should really be an M x 3 shape array (because ['MSG', timestamp, trigger]).
+        # if this isnt the case, you can't coerce to a shaped array (will be an array of lists :( ))
+        #so find where this fails, and remove that event (it's likely to be: ['MSG', time_stamp, '!MODE', 'RECORD' ...]) as this is another silly line from eyelink
+        
+        events_to_remove = [x for x in range(len(iblk_events)) if len(iblk_events[x]) != 3]
+        if len(events_to_remove) > 1:
+            print ('warning, there are multiple trigger lines that have more than 3 elements to the line, check the data?')
+        iblk_events.pop(events_to_remove[0]) #remove the first instance of more than 3 elements to the trigger line. should now be able to coerce to array with shape Mx3
+        
+        
         #get all non-data line indices
         iblk_nondata    = sorted(iblk_blink_inds + iblk_sac_inds + iblk_fix_inds + iblk_event_inds + iblk_input_inds)
 
@@ -190,9 +207,20 @@ def _parse_eye_data_blockwise(eye_fname, nblocks):
 
         #for binocular data, the shape is:
         # columns: time stamp, left x, left y, left pupil, right x, right y, right pupil
-        iblk_trackertime = iblk_data[:,0]
-        iblk_lx, iblk_ly, iblk_lp = iblk_data[:,1], iblk_data[:,2], iblk_data[:,3]
-        iblk_rx, iblk_ry, iblk_rp = iblk_data[:,4], iblk_data[:,5], iblk_data[:,6]
+        tmpiblkdata = dict()
+        tmpiblkdata['iblk_trackertime'] = iblk_data[:,0]
+        if binocular:
+            tmpiblkdata['iblk_lx'] = iblk_data[:,1]
+            tmpiblkdata['iblk_ly'] = iblk_data[:,2]
+            tmpiblkdata['iblk_lp'] = iblk_data[:,3]
+            tmpiblkdata['iblk_rx'] = iblk_data[:,4]
+            tmpiblkdata['iblk_ry'] = iblk_data[:,5]
+            tmpiblkdata['iblk_rp'] = iblk_data[:,6]
+        elif not binocular:
+            tmpiblkdata['iblk_x'] = iblk_data[:,1]
+            tmpiblkdata['iblk_y'] = iblk_data[:,2]
+            tmpiblkdata['iblk_p'] = iblk_data[:,3]
+
 
         # split Efix/Sfix and Esacc/Ssacc into separate lists
         iblk_efix = [iblk_fix[x] for x in range(len(iblk_fix)) if
@@ -210,20 +238,17 @@ def _parse_eye_data_blockwise(eye_fname, nblocks):
                      iblk_blink[x][0] == 'EBLINK']
 
         #append to the collection of all data now
-        trackertime.append(iblk_trackertime)
-        lx.append(iblk_lx)
-        ly.append(iblk_ly)
-        rx.append(iblk_rx)
-        ry.append(iblk_ry)
-        lp.append(iblk_lp)
-        rp.append(iblk_rp)
-        Efix.append(iblk_efix)
-        Sfix.append(iblk_sfix)
-        Ssac.append(iblk_ssac)
-        Esac.append(iblk_esac)
-        Sblk.append(iblk_sblk)
-        Eblk.append(iblk_eblk)
-        Msg.append(iblk_events)
+        for key in tmpdata.keys():
+            tmpdata[key] = np.append(tmpdata[key], tmpiblkdata['iblk_' + key])
+
+        tmpdata['Efix'] = np.append(tmpdata['Efix'], iblk_efix)
+        tmpdata['Sfix'] = np.append(tmpdata['Sfix'], iblk_sfix)
+        tmpdata['Esac'] = np.append(tmpdata['Esac'], iblk_esac)
+        tmpdata['Ssac'] = np.append(tmpdata['Ssac'], iblk_ssac)
+        tmpdata['Eblk'] = np.append(tmpdata['Eblk'], iblk_eblk)
+        tmpdata['Sblk'] = np.append(tmpdata['Sblk'], iblk_sblk)
+        tmpdata['Msg']  = np.append(tmpdata['Msg'], iblk_events)
+        
 
     iblock = {
     'trackertime': [],
