@@ -130,17 +130,19 @@ def _parse_eye_data_blockwise(eye_fname, nblocks, binocular):
     
     blocked_data = np.array([]);
     
-    tmpdata = dict() #this will house the arrays that we fill with information
-    tmpdata['trackertime'] = np.array([])
-    for trace in traces:
-        tmpdata[trace] = np.array([])
-        
-    tmpdata['Efix'] = np.array([]); tmpdata['Sfix'] = np.array([])
-    tmpdata['Esac'] = np.array([]); tmpdata['Ssac'] = np.array([])
-    tmpdata['Eblk'] = np.array([]); tmpdata['Sblk'] = np.array([])
-    tmpdata['Msg']  = np.array([])
 
     for istart in range(len(start_inds)):
+
+        tmpdata = dict() #this will house the arrays that we fill with information
+        tmpdata['trackertime'] = np.array([])
+        for trace in traces:
+            tmpdata[trace] = np.array([])
+            
+        tmpdata['Efix'] = np.array([]); tmpdata['Sfix'] = np.array([])
+        tmpdata['Esac'] = np.array([]); tmpdata['Ssac'] = np.array([])
+        tmpdata['Eblk'] = np.array([]); tmpdata['Sblk'] = np.array([])
+        tmpdata['Msg']  = np.array([])
+
         start_line = start_inds[istart]
         end_line   = end_inds[istart]
 
@@ -237,27 +239,19 @@ def _parse_eye_data_blockwise(eye_fname, nblocks, binocular):
         iblk_eblk = np.array([iblk_blink[x] for x in range(len(iblk_blink)) if
                      iblk_blink[x][0] == 'EBLINK'])
 
-        #append to the collection of all data now
+        #create tmpdata (the block structure) by adding in relevant information
         for trace in traces:
-            tmpdata[trace] = np.append(tmpdata[trace], tmpiblkdata['iblk_' + trace])
-
-        #annoyingly though, lines below won't just add an extra array, but will append elements. this means we need to reshape afterwards ffs.
-        tmpdata['Efix'] = np.append(tmpdata['Efix'], iblk_efix)  #this should have 8  columns
-        tmpdata['Sfix'] = np.append(tmpdata['Sfix'], iblk_sfix)  #this should have 3  columns
-        tmpdata['Esac'] = np.append(tmpdata['Esac'], iblk_esac)  #this should have 11 columns
-        tmpdata['Ssac'] = np.append(tmpdata['Ssac'], iblk_ssac)  #this should have 3  columns
-        tmpdata['Eblk'] = np.append(tmpdata['Eblk'], iblk_eblk)  #this should have 5  columns
-        tmpdata['Sblk'] = np.append(tmpdata['Sblk'], iblk_sblk)  #this should have 3  columns
-        tmpdata['Msg']  = np.append(tmpdata['Msg'], iblk_events) #this should have 3  columns
+            tmpdata[trace] = tmpiblkdata['iblk_' + trace]
         
-        #reshape the data..
-        tmpdata['Efix'] = tmpdata['Efix'].reshape((-1,8))
-        tmpdata['Sfix'] = tmpdata['Sfix'].reshape((-1,3))
-        tmpdata['Esac'] = tmpdata['Esac'].reshape((-1,11))
-        tmpdata['Ssac'] = tmpdata['Ssac'].reshape((-1,3))
-        tmpdata['Eblk'] = tmpdata['Eblk'].reshape((-1,5))
-        tmpdata['Sblk'] = tmpdata['Sblk'].reshape((-1,3))
-        tmpdata['Msg']  = tmpdata['Msg'].reshape((-1,3))
+        tmpdata['trackertime'] = tmpiblkdata['iblk_trackertime']
+        tmpdata['Efix'] = iblk_efix   #this should have 8  columns
+        tmpdata['Sfix'] = iblk_sfix   #this should have 3  columns
+        tmpdata['Esac'] = iblk_esac   #this should have 11 columns
+        tmpdata['Ssac'] = iblk_ssac   #this should have 3  columns
+        tmpdata['Eblk'] = iblk_eblk   #this should have 5  columns
+        tmpdata['Sblk'] = iblk_sblk   #this should have 3  columns
+        tmpdata['Msg']  = iblk_events #this should have 3  columns
+
         
         #tmpdata now contains the information for that blocks data. now we just need to add this to the blocked_data object before returning it
         
@@ -495,34 +489,35 @@ def find_missing_periods(data, nblocks, traces_to_scan):
 #            raise Exception('The signal relating to the right pupil size is missing. Make sure that the right pupil is labelled \'rp\'')
 
         #create empty vectors to hold start and end points of missing data in the traces specified in function call
+        tmpdata = dict()
         for trace in traces_to_scan:
-            vars()['s_' + trace] = []
-            vars()['e_' + trace] = []
+            tmpdata['s_' + trace] = []
+            tmpdata['e_' + trace] = []
 
         #find the missing data in each gaze trace
         for trace in traces_to_scan:
             tmp_mtrace = np.array(np.isnan(block[trace]) == True, dtype = int) #array's of 1/0's if data is missing at a sample
             tmp_dtrace = np.diff(tmp_mtrace) #find the change-points. +1 means goes from present to absent, -1 from absent to present
-            vars()['s_' + trace] = np.squeeze(np.where(tmp_dtrace ==  1)) #find where it starts to be missing
-            vars()['e_' + trace] = np.squeeze(np.where(tmp_dtrace == -1)) #find the index of the last missing sample
+            tmpdata['s_' + trace] = np.squeeze(np.where(tmp_dtrace ==  1)) #find where it starts to be missing
+            tmpdata['e_' + trace] = np.squeeze(np.where(tmp_dtrace == -1)) #find the index of the last missing sample
 
 
         for trace in traces_to_scan:
-            vars()['Eblk_' + trace] = []
+            tmpdata['Eblk_' + trace] = []
 
         for trace in traces_to_scan:               # loop over all traces
-            for i in range(len(vars()['s_' + trace])):  # loop over every start of missing data
-                if vars()['s_' + trace].size == 1: # if only one missing period (unlikely in blocked data, but common if you get trialwise recordings)
-                    start = vars()['s_' + trace].tolist()
-                    end   = vars()['e_' + trace].tolist()
+            for i in range(len(tmpdata['s_' + trace])):  # loop over every start of missing data
+                if tmpdata['s_' + trace].size == 1: # if only one missing period (unlikely in blocked data, but common if you get trialwise recordings)
+                    start = tmpdata['s_' + trace].tolist()
+                    end   = tmpdata['e_' + trace].tolist()
                 else:
-                    start   = vars()['s_' + trace][i]
-                    if i    < vars()['e_' + trace].size: #check within the range of missing periods in the data
-                        end = vars()['e_' + trace][i]
-                    elif i == vars()['e_' + trace].size:
-                        end = vars()['e_' + trace][-1]
+                    start   = tmpdata['s_' + trace][i]
+                    if i    < tmpdata['e_' + trace].size: #check within the range of missing periods in the data
+                        end = tmpdata['e_' + trace][i]
+                    elif i == tmpdata['e_' + trace].size:
+                        end = tmpdata['e_' + trace][-1]
                     else:
-                        end = vars()['e_' + trace][-1] #get the last end point
+                        end = tmpdata['e_' + trace][-1] #get the last end point
                 ttime_start = block['trackertime'][start]
                 ttime_end   = block['trackertime'][end]
                 dur = end-start
@@ -530,11 +525,11 @@ def find_missing_periods(data, nblocks, traces_to_scan):
                 # now we'll make a blink event structure
                 # blink_code, start (blocktime), end (blocktime), start (trackertime), end (trackertime), duration
                 evnt = [trace + '_BLK', start, end, ttime_start, ttime_end, dur]
-                vars()['Eblk_' + trace].append(evnt)
+                tmpdata['Eblk_' + trace].append(evnt)
 
         #append these new structures to the dataset...
         for trace in traces_to_scan:
-            block['Eblk_' + trace] = vars()['Eblk_' + trace]
+            block['Eblk_' + trace] = tmpdata['Eblk_' + trace]
     return data
 
 def interpolateBlinks_Blocked(block, trace):
