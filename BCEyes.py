@@ -128,7 +128,7 @@ def _parse_eye_data_blockwise(eye_fname, nblocks, binocular):
     elif binocular == False:
         traces = ['x', 'y', 'p']
     
-    #trackertime = np.array([])
+    blocked_data = np.array([]);
     
     tmpdata = dict() #this will house the arrays that we fill with information
     tmpdata['trackertime'] = np.array([])
@@ -140,9 +140,9 @@ def _parse_eye_data_blockwise(eye_fname, nblocks, binocular):
     tmpdata['Eblk'] = np.array([]); tmpdata['Sblk'] = np.array([])
     tmpdata['Msg']  = np.array([])
 
-    for i in range(len(start_inds)):
-        start_line = start_inds[i]
-        end_line   = end_inds[i]
+    for istart in range(len(start_inds)):
+        start_line = start_inds[istart]
+        end_line   = end_inds[istart]
 
         iblk = np.array(split_d[start_line:end_line]) #get only lines with info for this block
 
@@ -165,7 +165,7 @@ def _parse_eye_data_blockwise(eye_fname, nblocks, binocular):
                 iblk_blink_inds.append(x[0]) # add line index where blink detected (SR research)
                 iblk_blink.append(y)         # add blink event structure to list
             elif y[0] == 'INPUT':
-               iblk_input_inds.append(x[0])  # find where 'INPUT' is in data (sometimes appears, has no use...)
+                iblk_input_inds.append(x[0])  # find where 'INPUT' is in data (sometimes appears, has no use...)
                
         #the block events should really be an M x 3 shape array (because ['MSG', timestamp, trigger]).
         # if this isnt the case, you can't coerce to a shaped array (will be an array of lists :( ))
@@ -175,6 +175,7 @@ def _parse_eye_data_blockwise(eye_fname, nblocks, binocular):
         if len(events_to_remove) > 1:
             print ('warning, there are multiple trigger lines that have more than 3 elements to the line, check the data?')
         iblk_events.pop(events_to_remove[0]) #remove the first instance of more than 3 elements to the trigger line. should now be able to coerce to array with shape Mx3
+        iblk_events = np.array(iblk_events)  #coerce to array for easier manipulation later on
         
         
         #get all non-data line indices
@@ -222,64 +223,45 @@ def _parse_eye_data_blockwise(eye_fname, nblocks, binocular):
             tmpiblkdata['iblk_p'] = iblk_data[:,3]
 
 
-        # split Efix/Sfix and Esacc/Ssacc into separate lists
-        iblk_efix = [iblk_fix[x] for x in range(len(iblk_fix)) if
-                     iblk_fix[x][0] == 'EFIX']
-        iblk_sfix = [iblk_fix[x] for x in range(len(iblk_fix)) if
-                     iblk_fix[x][0] == 'SFIX']
-
-        iblk_ssac = [iblk_sac[x] for x in range(len(iblk_sac)) if
-                     iblk_sac[x][0] == 'SSACC']
-        iblk_esac = [iblk_sac[x] for x in range(len(iblk_sac)) if
-                     iblk_sac[x][0] == 'ESACC']
-        iblk_sblk = [iblk_blink[x] for x in range(len(iblk_blink)) if
-                     iblk_blink[x][0] == 'SBLINK']
-        iblk_eblk = [iblk_blink[x] for x in range(len(iblk_blink)) if
-                     iblk_blink[x][0] == 'EBLINK']
+        # split Efix/Sfix and Esacc/Ssacc into separate lists, and make into arrays for easier manipulation later on
+        iblk_efix = np.array([iblk_fix[x] for x in range(len(iblk_fix)) if
+                     iblk_fix[x][0] == 'EFIX'])
+        iblk_sfix = np.array([iblk_fix[x] for x in range(len(iblk_fix)) if
+                     iblk_fix[x][0] == 'SFIX'])
+        iblk_ssac = np.array([iblk_sac[x] for x in range(len(iblk_sac)) if
+                     iblk_sac[x][0] == 'SSACC'])
+        iblk_esac = np.array([iblk_sac[x] for x in range(len(iblk_sac)) if
+                     iblk_sac[x][0] == 'ESACC'])
+        iblk_sblk = np.array([iblk_blink[x] for x in range(len(iblk_blink)) if
+                     iblk_blink[x][0] == 'SBLINK'])
+        iblk_eblk = np.array([iblk_blink[x] for x in range(len(iblk_blink)) if
+                     iblk_blink[x][0] == 'EBLINK'])
 
         #append to the collection of all data now
-        for key in tmpdata.keys():
-            tmpdata[key] = np.append(tmpdata[key], tmpiblkdata['iblk_' + key])
+        for trace in traces:
+            tmpdata[trace] = np.append(tmpdata[trace], tmpiblkdata['iblk_' + trace])
 
-        tmpdata['Efix'] = np.append(tmpdata['Efix'], iblk_efix)
-        tmpdata['Sfix'] = np.append(tmpdata['Sfix'], iblk_sfix)
-        tmpdata['Esac'] = np.append(tmpdata['Esac'], iblk_esac)
-        tmpdata['Ssac'] = np.append(tmpdata['Ssac'], iblk_ssac)
-        tmpdata['Eblk'] = np.append(tmpdata['Eblk'], iblk_eblk)
-        tmpdata['Sblk'] = np.append(tmpdata['Sblk'], iblk_sblk)
-        tmpdata['Msg']  = np.append(tmpdata['Msg'], iblk_events)
+        #annoyingly though, lines below won't just add an extra array, but will append elements. this means we need to reshape afterwards ffs.
+        tmpdata['Efix'] = np.append(tmpdata['Efix'], iblk_efix)  #this should have 8  columns
+        tmpdata['Sfix'] = np.append(tmpdata['Sfix'], iblk_sfix)  #this should have 3  columns
+        tmpdata['Esac'] = np.append(tmpdata['Esac'], iblk_esac)  #this should have 11 columns
+        tmpdata['Ssac'] = np.append(tmpdata['Ssac'], iblk_ssac)  #this should have 3  columns
+        tmpdata['Eblk'] = np.append(tmpdata['Eblk'], iblk_eblk)  #this should have 5  columns
+        tmpdata['Sblk'] = np.append(tmpdata['Sblk'], iblk_sblk)  #this should have 3  columns
+        tmpdata['Msg']  = np.append(tmpdata['Msg'], iblk_events) #this should have 3  columns
         
-
-    iblock = {
-    'trackertime': [],
-    'lx'  : [], 'ly'  : [], 'lp'  : [],
-    'rx'  : [], 'ry'  : [], 'rp'  : [],
-    'Efix': [], 'Sfix': [],
-    'Esac': [], 'Ssac': [],
-    'Eblk': [], 'Sblk': [],
-    'Msg' : []
-    }
-    dummy = copy.deepcopy(iblock)
-    blocked_data = np.repeat(dummy, nblocks)
-
-    for i in np.arange(nblocks):
-        iblock_data = copy.deepcopy(iblock)
-        iblock_data['trackertime'] = trackertime[i]
-        iblock_data['lx'] = lx[i]
-        iblock_data['ly'] = ly[i]
-        iblock_data['lp'] = lp[i]
-        iblock_data['rx'] = rx[i]
-        iblock_data['ry'] = ry[i]
-        iblock_data['rp'] = rp[i]
-        iblock_data['Efix'] = Efix[i]
-        iblock_data['Sfix'] = Sfix[i]
-        iblock_data['Esac'] = Esac[i]
-        iblock_data['Ssac'] = Ssac[i]
-        iblock_data['Eblk'] = Eblk[i]
-        iblock_data['Sblk'] = Sblk[i]
-        iblock_data['Msg'] = Msg[i]
-        blocked_data[i] = iblock_data
-
+        #reshape the data..
+        tmpdata['Efix'] = tmpdata['Efix'].reshape((-1,8))
+        tmpdata['Sfix'] = tmpdata['Sfix'].reshape((-1,3))
+        tmpdata['Esac'] = tmpdata['Esac'].reshape((-1,11))
+        tmpdata['Ssac'] = tmpdata['Ssac'].reshape((-1,3))
+        tmpdata['Eblk'] = tmpdata['Eblk'].reshape((-1,5))
+        tmpdata['Sblk'] = tmpdata['Sblk'].reshape((-1,3))
+        tmpdata['Msg']  = tmpdata['Msg'].reshape((-1,3))
+        
+        #tmpdata now contains the information for that blocks data. now we just need to add this to the blocked_data object before returning it
+        
+        blocked_data = np.append(blocked_data, copy.deepcopy(tmpdata))
     return blocked_data
 
 def _parse_eye_data_trialwise(eye_fname, nblocks, ntrials):
