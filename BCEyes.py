@@ -44,23 +44,23 @@ def Eucdist(x1, y1, x2, y2):
     distance = np.sqrt( (x2-x1)**2 + (y2-y1)**2)
     return distance
 
-def parse_eye_data(eye_fname, block_rec, trial_rec, nblocks, ntrials = None, binocular = True):
+def parse_eye_data(eye_fname, block_rec, trial_rec, nblocks, ntrials = None):
     """
 
     eye_fname    -- full path to a file to be parsed. this is used as a template to create the parsed data in pickle form
 
     block_rec    -- boolean as to whether you stopped/started recording blockwise in your task
+                    (if you recorded by starting at the beginning and stopping at the end of the task, block_rec should be 1 - you will get a length one array as output)
 
     trial_rec    -- boolean as to whethre you stopped/started recording trialwise in your task
 
-    nblocks      -- the number of blocks of task run in your experiment. This must be defined in all cases.
+    nblocks      -- the number of blocks of task run in your experiment. This must be defined in all cases. (if you had one stop/start at the beginning/end of the task, this should be set to 1)
 
     ntrials      -- the number of trials in your data if you recorded the eyes with trialwise stop/start
                     if you recorded blockwise, then ntrials is not needed.
 
                     if you recorded trialwise, then the number of trials per block
                     is calculated and used to separate the data into defined blocks
-    binocular    -- this is a boolean specifying if you made a binocular recording (True if yes, False if monocular)
     """
     if not os.path.exists(eye_fname): #check that the path to the file exists
         raise Exception('the filename: %s does not exist. Please check!' %eye_fname)
@@ -90,14 +90,14 @@ def parse_eye_data(eye_fname, block_rec, trial_rec, nblocks, ntrials = None, bin
 
 
     if block_rec:
-        d = _parse_eye_data_blockwise(eye_fname, nblocks, binocular)
+        d = _parse_eye_data_blockwise(eye_fname, nblocks)
     else:
-        d = _parse_eye_data_trialwise(eye_fname, nblocks, ntrials, binocular)
+        d = _parse_eye_data_trialwise(eye_fname, nblocks, ntrials)
 
     return d #return the parsed data
 
 
-def _parse_eye_data_blockwise(eye_fname, nblocks, binocular):
+def _parse_eye_data_blockwise(eye_fname, nblocks):
     """
     this function is called by parse_eye_data and will operate on data where
     the recording was stopped/started for each block of task data
@@ -123,28 +123,20 @@ def _parse_eye_data_blockwise(eye_fname, nblocks, binocular):
         raise DataError('the number of times the recording was started and stopped does not align. check problems with acquisition')
 
     #assign some empty lists to get filled with information
-    if binocular == True:
-        traces = ['lx', 'rx', 'ly', 'ry', 'lp', 'rp']
-    elif binocular == False:
-        traces = ['x', 'y', 'p']
-    
-    blocked_data = np.array([]);
-    
+    trackertime = []
+    lx   = []; rx   = []
+    ly   = []; ry   = []
+    lp   = []; rp   = []
 
-    for istart in range(len(start_inds)):
 
-        tmpdata = dict() #this will house the arrays that we fill with information
-        tmpdata['trackertime'] = np.array([])
-        for trace in traces:
-            tmpdata[trace] = np.array([])
-            
-        tmpdata['Efix'] = np.array([]); tmpdata['Sfix'] = np.array([])
-        tmpdata['Esac'] = np.array([]); tmpdata['Ssac'] = np.array([])
-        tmpdata['Eblk'] = np.array([]); tmpdata['Sblk'] = np.array([])
-        tmpdata['Msg']  = np.array([])
+    Efix = []; Sfix = []
+    Esac = []; Ssac = []
+    Eblk = []; Sblk = []
+    Msg  = []
 
-        start_line = start_inds[istart]
-        end_line   = end_inds[istart]
+    for i in range(len(start_inds)):
+        start_line = start_inds[i]
+        end_line   = end_inds[i]
 
         iblk = np.array(split_d[start_line:end_line]) #get only lines with info for this block
 
@@ -167,19 +159,8 @@ def _parse_eye_data_blockwise(eye_fname, nblocks, binocular):
                 iblk_blink_inds.append(x[0]) # add line index where blink detected (SR research)
                 iblk_blink.append(y)         # add blink event structure to list
             elif y[0] == 'INPUT':
-                iblk_input_inds.append(x[0])  # find where 'INPUT' is in data (sometimes appears, has no use...)
-               
-        #the block events should really be an M x 3 shape array (because ['MSG', timestamp, trigger]).
-        # if this isnt the case, you can't coerce to a shaped array (will be an array of lists :( ))
-        #so find where this fails, and remove that event (it's likely to be: ['MSG', time_stamp, '!MODE', 'RECORD' ...]) as this is another silly line from eyelink
-        
-        events_to_remove = [x for x in range(len(iblk_events)) if len(iblk_events[x]) != 3]
-        if len(events_to_remove) > 1:
-            print ('warning, there are multiple trigger lines that have more than 3 elements to the line, check the data?')
-        iblk_events.pop(events_to_remove[0]) #remove the first instance of more than 3 elements to the trigger line. should now be able to coerce to array with shape Mx3
-        iblk_events = np.array(iblk_events)  #coerce to array for easier manipulation later on
-        
-        
+               iblk_input_inds.append(x[0])  # find where 'INPUT' is in data (sometimes appears, has no use...)
+
         #get all non-data line indices
         iblk_nondata    = sorted(iblk_blink_inds + iblk_sac_inds + iblk_fix_inds + iblk_event_inds + iblk_input_inds)
 
@@ -210,52 +191,71 @@ def _parse_eye_data_blockwise(eye_fname, nblocks, binocular):
 
         #for binocular data, the shape is:
         # columns: time stamp, left x, left y, left pupil, right x, right y, right pupil
-        tmpiblkdata = dict()
-        tmpiblkdata['iblk_trackertime'] = iblk_data[:,0]
-        if binocular:
-            tmpiblkdata['iblk_lx'] = iblk_data[:,1]
-            tmpiblkdata['iblk_ly'] = iblk_data[:,2]
-            tmpiblkdata['iblk_lp'] = iblk_data[:,3]
-            tmpiblkdata['iblk_rx'] = iblk_data[:,4]
-            tmpiblkdata['iblk_ry'] = iblk_data[:,5]
-            tmpiblkdata['iblk_rp'] = iblk_data[:,6]
-        elif not binocular:
-            tmpiblkdata['iblk_x'] = iblk_data[:,1]
-            tmpiblkdata['iblk_y'] = iblk_data[:,2]
-            tmpiblkdata['iblk_p'] = iblk_data[:,3]
+        iblk_trackertime = iblk_data[:,0]
+        iblk_lx, iblk_ly, iblk_lp = iblk_data[:,1], iblk_data[:,2], iblk_data[:,3]
+        iblk_rx, iblk_ry, iblk_rp = iblk_data[:,4], iblk_data[:,5], iblk_data[:,6]
 
+        # split Efix/Sfix and Esacc/Ssacc into separate lists
+        iblk_efix = [iblk_fix[x] for x in range(len(iblk_fix)) if
+                     iblk_fix[x][0] == 'EFIX']
+        iblk_sfix = [iblk_fix[x] for x in range(len(iblk_fix)) if
+                     iblk_fix[x][0] == 'SFIX']
 
-        # split Efix/Sfix and Esacc/Ssacc into separate lists, and make into arrays for easier manipulation later on
-        iblk_efix = np.array([iblk_fix[x] for x in range(len(iblk_fix)) if
-                     iblk_fix[x][0] == 'EFIX'])
-        iblk_sfix = np.array([iblk_fix[x] for x in range(len(iblk_fix)) if
-                     iblk_fix[x][0] == 'SFIX'])
-        iblk_ssac = np.array([iblk_sac[x] for x in range(len(iblk_sac)) if
-                     iblk_sac[x][0] == 'SSACC'])
-        iblk_esac = np.array([iblk_sac[x] for x in range(len(iblk_sac)) if
-                     iblk_sac[x][0] == 'ESACC'])
-        iblk_sblk = np.array([iblk_blink[x] for x in range(len(iblk_blink)) if
-                     iblk_blink[x][0] == 'SBLINK'])
-        iblk_eblk = np.array([iblk_blink[x] for x in range(len(iblk_blink)) if
-                     iblk_blink[x][0] == 'EBLINK'])
+        iblk_ssac = [iblk_sac[x] for x in range(len(iblk_sac)) if
+                     iblk_sac[x][0] == 'SSACC']
+        iblk_esac = [iblk_sac[x] for x in range(len(iblk_sac)) if
+                     iblk_sac[x][0] == 'ESACC']
+        iblk_sblk = [iblk_blink[x] for x in range(len(iblk_blink)) if
+                     iblk_blink[x][0] == 'SBLINK']
+        iblk_eblk = [iblk_blink[x] for x in range(len(iblk_blink)) if
+                     iblk_blink[x][0] == 'EBLINK']
 
-        #create tmpdata (the block structure) by adding in relevant information
-        for trace in traces:
-            tmpdata[trace] = tmpiblkdata['iblk_' + trace]
-        
-        tmpdata['trackertime'] = tmpiblkdata['iblk_trackertime']
-        tmpdata['Efix'] = iblk_efix   #this should have 8  columns
-        tmpdata['Sfix'] = iblk_sfix   #this should have 3  columns
-        tmpdata['Esac'] = iblk_esac   #this should have 11 columns
-        tmpdata['Ssac'] = iblk_ssac   #this should have 3  columns
-        tmpdata['Eblk'] = iblk_eblk   #this should have 5  columns
-        tmpdata['Sblk'] = iblk_sblk   #this should have 3  columns
-        tmpdata['Msg']  = iblk_events #this should have 3  columns
+        #append to the collection of all data now
+        trackertime.append(iblk_trackertime)
+        lx.append(iblk_lx)
+        ly.append(iblk_ly)
+        rx.append(iblk_rx)
+        ry.append(iblk_ry)
+        lp.append(iblk_lp)
+        rp.append(iblk_rp)
+        Efix.append(iblk_efix)
+        Sfix.append(iblk_sfix)
+        Ssac.append(iblk_ssac)
+        Esac.append(iblk_esac)
+        Sblk.append(iblk_sblk)
+        Eblk.append(iblk_eblk)
+        Msg.append(iblk_events)
 
-        
-        #tmpdata now contains the information for that blocks data. now we just need to add this to the blocked_data object before returning it
-        
-        blocked_data = np.append(blocked_data, copy.deepcopy(tmpdata))
+    iblock = {
+    'trackertime': [],
+    'lx'  : [], 'ly'  : [], 'lp'  : [],
+    'rx'  : [], 'ry'  : [], 'rp'  : [],
+    'Efix': [], 'Sfix': [],
+    'Esac': [], 'Ssac': [],
+    'Eblk': [], 'Sblk': [],
+    'Msg' : []
+    }
+    dummy = copy.deepcopy(iblock)
+    blocked_data = np.repeat(dummy, nblocks)
+
+    for i in np.arange(nblocks):
+        iblock_data = copy.deepcopy(iblock)
+        iblock_data['trackertime'] = trackertime[i]
+        iblock_data['lx'] = lx[i]
+        iblock_data['ly'] = ly[i]
+        iblock_data['lp'] = lp[i]
+        iblock_data['rx'] = rx[i]
+        iblock_data['ry'] = ry[i]
+        iblock_data['rp'] = rp[i]
+        iblock_data['Efix'] = Efix[i]
+        iblock_data['Sfix'] = Sfix[i]
+        iblock_data['Esac'] = Esac[i]
+        iblock_data['Ssac'] = Ssac[i]
+        iblock_data['Eblk'] = Eblk[i]
+        iblock_data['Sblk'] = Sblk[i]
+        iblock_data['Msg'] = Msg[i]
+        blocked_data[i] = iblock_data
+
     return blocked_data
 
 def _parse_eye_data_trialwise(eye_fname, nblocks, ntrials):
@@ -468,9 +468,9 @@ def find_missing_periods(data, nblocks, traces_to_scan):
     if nblocks != len(data): #len(data) should give you the number of blocks in the data file
         raise Exception('there are not as many blocks in the data as you think. check this!')
 
-
+    count = 0
     for block in data: #iterate over each block of data
-
+        print '- finding missing periods for block %02d'%count
         for trace in traces_to_scan:
             if trace not in block.keys():
                 raise Exception('the signal %s is missing from your data. check spelling, or check the traces you want to pass to the function!' %trace)
@@ -489,35 +489,35 @@ def find_missing_periods(data, nblocks, traces_to_scan):
 #            raise Exception('The signal relating to the right pupil size is missing. Make sure that the right pupil is labelled \'rp\'')
 
         #create empty vectors to hold start and end points of missing data in the traces specified in function call
-        tmpdata = dict()
         for trace in traces_to_scan:
-            tmpdata['s_' + trace] = []
-            tmpdata['e_' + trace] = []
+            vars()['s_' + trace] = []
+            vars()['e_' + trace] = []
 
         #find the missing data in each gaze trace
         for trace in traces_to_scan:
             tmp_mtrace = np.array(np.isnan(block[trace]) == True, dtype = int) #array's of 1/0's if data is missing at a sample
             tmp_dtrace = np.diff(tmp_mtrace) #find the change-points. +1 means goes from present to absent, -1 from absent to present
-            tmpdata['s_' + trace] = np.squeeze(np.where(tmp_dtrace ==  1)) #find where it starts to be missing
-            tmpdata['e_' + trace] = np.squeeze(np.where(tmp_dtrace == -1)) #find the index of the last missing sample
+            vars()['s_' + trace] = np.squeeze(np.where(tmp_dtrace ==  1)) #find where it starts to be missing
+            vars()['e_' + trace] = np.squeeze(np.where(tmp_dtrace == -1)) #find the index of the last missing sample
 
 
         for trace in traces_to_scan:
-            tmpdata['Eblk_' + trace] = []
+            vars()['Eblk_' + trace] = []
 
         for trace in traces_to_scan:               # loop over all traces
-            for i in range(len(tmpdata['s_' + trace])):  # loop over every start of missing data
-                if tmpdata['s_' + trace].size == 1: # if only one missing period (unlikely in blocked data, but common if you get trialwise recordings)
-                    start = tmpdata['s_' + trace].tolist()
-                    end   = tmpdata['e_' + trace].tolist()
+#            print trace
+            for i in range(vars()['s_' + trace].size):  # loop over every start of missing data
+                if vars()['s_' + trace].size == 1: # if only one missing period (unlikely in blocked data, but common if you get trialwise recordings)
+                    start = vars()['s_' + trace].tolist()
+                    end   = vars()['e_' + trace].tolist()
                 else:
-                    start   = tmpdata['s_' + trace][i]
-                    if i    < tmpdata['e_' + trace].size: #check within the range of missing periods in the data
-                        end = tmpdata['e_' + trace][i]
-                    elif i == tmpdata['e_' + trace].size:
-                        end = tmpdata['e_' + trace][-1]
+                    start   = vars()['s_' + trace][i]
+                    if i    < vars()['e_' + trace].size: #check within the range of missing periods in the data
+                        end = vars()['e_' + trace][i]
+                    elif i == vars()['e_' + trace].size:
+                        end = vars()['e_' + trace][-1]
                     else:
-                        end = tmpdata['e_' + trace][-1] #get the last end point
+                        end = vars()['e_' + trace][-1] #get the last end point
                 ttime_start = block['trackertime'][start]
                 ttime_end   = block['trackertime'][end]
                 dur = end-start
@@ -525,11 +525,12 @@ def find_missing_periods(data, nblocks, traces_to_scan):
                 # now we'll make a blink event structure
                 # blink_code, start (blocktime), end (blocktime), start (trackertime), end (trackertime), duration
                 evnt = [trace + '_BLK', start, end, ttime_start, ttime_end, dur]
-                tmpdata['Eblk_' + trace].append(evnt)
+                vars()['Eblk_' + trace].append(evnt)
 
         #append these new structures to the dataset...
         for trace in traces_to_scan:
-            block['Eblk_' + trace] = tmpdata['Eblk_' + trace]
+            block['Eblk_' + trace] = vars()['Eblk_' + trace]
+        count += 1
     return data
 
 def interpolateBlinks_Blocked(block, trace):
